@@ -11,5 +11,5 @@ dist/
 htmlcov/
 uv.lock
 .DS_Store
-tests/fixtures/*.parquet
-!tests/fixtures/README.md
+tests/fixtures/adult.data
+SQUAD_BRIEF.md
