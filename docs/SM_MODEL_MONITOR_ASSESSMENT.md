@@ -1,16 +1,16 @@
 # SageMaker Model Monitor + Clarify — honest assessment vs. custom monitoring
 
-> Internal engineering assessment. Author: Eoin (`@EoinMcUF`). Date: 2026-07-02.
-> Companion doc: [`MONITORING_CUSTOM_CONTAINER.md`](MONITORING_CUSTOM_CONTAINER.md) — describes the `ufx-monitor` container we already ship for MQ/DQ.
-> This doc is `main`-branch-appropriate. The custom `ufx-monitor` container it references lives on `feature/monitor-container` at commit [`570a7899`](https://github.com/urbanfoxai/ml-iac/tree/570a7899a08696c2495d44589d07ab076cb3efbb/src/monitor_containers/ufx_monitor).
+> Internal engineering assessment. Author: Eoin (`@<author>`). Date: 2026-07-02.
+> Companion doc: [`MONITORING_CUSTOM_CONTAINER.md`](MONITORING_CUSTOM_CONTAINER.md) — describes the `model-monitor` container we already ship for MQ/DQ.
+> This doc is `main`-branch-appropriate. The custom `model-monitor` container it references lives on `feature/monitor-container` at commit [`570a7899`](https://github.com/<deploy-repo>/tree/570a7899a08696c2495d44589d07ab076cb3efbb/containers/model_monitor).
 
 ---
 
 ## §1 — Executive summary
 
-- **What I tried.** Wire SageMaker Model Monitor (MQ + DQ) and Clarify (bias + explainability) end-to-end for `bos_sess_seq_clf`, using AWS-managed baseline Processing Jobs cross-account into `ML_ARTIFACT`.
+- **What I tried.** Wire SageMaker Model Monitor (MQ + DQ) and Clarify (bias + explainability) end-to-end for `example_classifier`, using AWS-managed baseline Processing Jobs cross-account into `ML_ARTIFACT`.
 - **What I hit.** Days lost on opaque Clarify config validation (`analyzer/config/jobconfig.py:129 Unexpected output in the processing job config`), a hard un-adjustable 1 rps `CreateProcessingJob` platform limit, three bespoke cross-account IAM/KMS/S3 grants, a dormant upstream repo, and — as of the writing of this doc — **AWS has publicly closed new customer access to SageMaker Clarify effective 2026-06-30 and now recommends `shap` + pandas/scikit-learn + AWS-samples reference solutions instead**. That is the strongest possible signal: the platform we've been fighting has been officially superseded by its owner.
-- **What I recommend.** Detach the last piece we still take from Model Monitor / Clarify — baseline computation — and put it in a small `ufx-baseline` container that runs beside our existing `ufx-monitor` container. ~250-400 LOC. Cost: ~1 squad-day. Removes every one of the pain points below and puts us exactly on the pattern AWS itself is now telling customers to use.
+- **What I recommend.** Detach the last piece we still take from Model Monitor / Clarify — baseline computation — and put it in a small `model-baseline` container that runs beside our existing `model-monitor` container. ~250-400 LOC. Cost: ~1 squad-day. Removes every one of the pain points below and puts us exactly on the pattern AWS itself is now telling customers to use.
 
 ---
 
@@ -31,7 +31,7 @@ Two stacks, often conflated:
 
 Value proposition on paper: turnkey, AWS-native, compliance-friendly, integrated with MPG and Endpoint capture. In practice the machinery is a thin scheduler on top of two closed-source container images (Model Monitor and Clarify) with a lot of undocumented shape constraints — see §3.
 
-Our existing custom container [`ufx-monitor`](https://github.com/urbanfoxai/ml-iac/tree/570a7899a08696c2495d44589d07ab076cb3efbb/src/monitor_containers/ufx_monitor) already consumes `constraints.json` / `statistics.json` / `analysis.json` and emits CW metrics. It is deliberately schema-compatible so that whichever thing produces those JSON files (Clarify today, our own container tomorrow) is swappable.
+Our existing custom container [`model-monitor`](https://github.com/<deploy-repo>/tree/570a7899a08696c2495d44589d07ab076cb3efbb/containers/model_monitor) already consumes `constraints.json` / `statistics.json` / `analysis.json` and emits CW metrics. It is deliberately schema-compatible so that whichever thing produces those JSON files (Clarify today, our own container tomorrow) is swappable.
 
 ---
 
@@ -69,7 +69,7 @@ Hard 1 rps ceiling that cannot be raised. Bias + explainability + data-quality b
 
 ### 3d. Cross-account topology
 
-Baselines bucket is in `ML_ARTIFACT` (`965377249924`). Model MPG for `bos_sess_seq_clf` is in `DS` (`714462557551`) today (migration TBD — see SYSTEM `Known Gaps`). Clarify's shadow endpoint for SHAP must live in the same account as the Clarify Processing Job. Cross-account plumbing needs at minimum:
+Baselines bucket is in `ML_ARTIFACT` (`965377249924`). Model MPG for `example_classifier` is in `DS` (`714462557551`) today (migration TBD — see SYSTEM `Known Gaps`). Clarify's shadow endpoint for SHAP must live in the same account as the Clarify Processing Job. Cross-account plumbing needs at minimum:
 
 1. S3 bucket policy grant on the baselines bucket to the Clarify execution role.
 2. KMS key policy grant on the artifact CMK.
@@ -126,16 +126,16 @@ Key implication: even AWS's own 2026 reference architecture for what to build no
 
 ---
 
-## §5 — Where UFX is on this map
+## §5 — Where this project is on this map
 
 We already have:
 
-- `ufx-monitor` container ([`src/monitor_containers/ufx_monitor/`](https://github.com/urbanfoxai/ml-iac/tree/570a7899a08696c2495d44589d07ab076cb3efbb/src/monitor_containers/ufx_monitor)) — consumes baseline JSONs from S3, computes drift + emits CW metrics. That is the industry pattern.
-- `MonitoringScheduleStack` + `UfxMlMonitoringStack` — EventBridge → SFN → our container in `ML_ARTIFACT`.
+- `model-monitor` container ([`containers/model_monitor/`](https://github.com/<deploy-repo>/tree/570a7899a08696c2495d44589d07ab076cb3efbb/containers/model_monitor)) — consumes baseline JSONs from S3, computes drift + emits CW metrics. That is the industry pattern.
+- `MonitoringScheduleStack` + `MonitoringStack` — EventBridge → SFN → our container in `ML_ARTIFACT`.
 - DDB outcomes table + EventBridge Pipes fan-out for ground truth join.
 - Dashboards + CW alarms.
 
-The **only** piece still coupled to Model Monitor / Clarify is baseline compute (Clarify Processing Job producing `constraints.json` / `statistics.json` / `analysis.json`). MQ and DQ Model Monitor schedules — the scheduled comparison side — we've already replaced with `ufx-monitor`.
+The **only** piece still coupled to Model Monitor / Clarify is baseline compute (Clarify Processing Job producing `constraints.json` / `statistics.json` / `analysis.json`). MQ and DQ Model Monitor schedules — the scheduled comparison side — we've already replaced with `model-monitor`.
 
 We are ~80% on the industry pattern. Detaching the last piece takes us to 100%, matches AWS's own 2026 recommendation, and removes every pain point in §3.
 
@@ -143,16 +143,16 @@ We are ~80% on the industry pattern. Detaching the last piece takes us to 100%, 
 
 ## §6 — Recommendation
 
-Build `ufx-baseline` — a peer container to `ufx-monitor`, same repo, same invocation topology (SFN + EventBridge in `ML_ARTIFACT`, image published to the same ECR).
+Build `model-baseline` — a peer container to `model-monitor`, same repo, same invocation topology (SFN + EventBridge in `ML_ARTIFACT`, image published to the same ECR).
 
 **Inputs**
 
-- Training snapshot (S3, from ml-core Feature Store export) — same input Clarify takes today.
+- Training snapshot (S3, from train-repo Feature Store export) — same input Clarify takes today.
 - Config JSON: label column, facet column, target facet value, class labels, N SHAP samples.
 
 **Outputs**
 
-- `analysis.json` at the S3 path our `ufx-monitor` container already reads. Same schema as Clarify emits, so downstream code is unchanged.
+- `analysis.json` at the S3 path our `model-monitor` container already reads. Same schema as Clarify emits, so downstream code is unchanged.
 - `constraints.json` / `statistics.json` for MQ / DQ variants — the same statistical formulas Clarify runs, computed with pandas.
 
 **Libraries**
@@ -163,17 +163,17 @@ Build `ufx-baseline` — a peer container to `ufx-monitor`, same repo, same invo
 
 **Size**
 
-~250-400 LOC total: driver, config parser, bias driver, SHAP driver, JSON emitter, Dockerfile, entrypoint. Peer in size to `ufx-monitor`.
+~250-400 LOC total: driver, config parser, bias driver, SHAP driver, JSON emitter, Dockerfile, entrypoint. Peer in size to `model-monitor`.
 
 **Deployment**
 
-- New CDK construct `UfxBaselineConstruct` in `ml-iac`. Rip the Clarify branch out of `AnalyzerBaselineConstruct` and route to the new construct.
+- New CDK construct `BaselineConstruct` in `deploy-repo`. Rip the Clarify branch out of `AnalyzerBaselineConstruct` and route to the new construct.
 - No cross-account SHAP endpoint. Model loaded in-container from `model.tar.gz` — either post-migration to `ML_ARTIFACT` MPG (see SYSTEM Known Gaps), or a one-time S3 copy for the pilot.
-- Same ECR + SFN + EventBridge invocation topology `ufx-monitor` already uses.
+- Same ECR + SFN + EventBridge invocation topology `model-monitor` already uses.
 
 **Cost**
 
-~1 squad-day work, incl. Dockerfile, driver, unit tests, CDK wiring, and a one-shot proof on `bos_sess_seq_clf`.
+~1 squad-day work, incl. Dockerfile, driver, unit tests, CDK wiring, and a one-shot proof on `example_classifier`.
 
 **Benefits (each fixes a §3 item)**
 
@@ -190,10 +190,10 @@ Build `ufx-baseline` — a peer container to `ufx-monitor`, same repo, same invo
 
 Not this doc's job to design. Sketch only, so leadership sees the shape:
 
-1. Register `bos_sess_seq_clf` (latest MP version) into `ML_ARTIFACT` MPG so DIY compute can load the model locally without cross-account round-trips. (Blocked on / gated by SYSTEM Known Gap: DataScience account migration — 3 of 4 projects still training in `DS`.)
-2. Author `ufx-baseline` container (bias driver + SHAP driver + JSON emitter). Same repo, same CI, same ECR as `ufx-monitor`.
-3. Rip the Clarify branch out of `AnalyzerBaselineConstruct` in `ml-iac`. Replace with `UfxBaselineConstruct` referencing the new image. Keep the Model-Monitor MQ / DQ baseline branches intact for the interim if we want, or fold those into `ufx-baseline` at the same time.
-4. Proof end-to-end on `bos_sess_seq_clf`: run baseline → drop into monitoring S3 path → confirm existing `ufx-monitor` schedule consumes it and emits identical CW metrics.
+1. Register `example_classifier` (latest MP version) into `ML_ARTIFACT` MPG so DIY compute can load the model locally without cross-account round-trips. (Blocked on / gated by SYSTEM Known Gap: DataScience account migration — 3 of 4 projects still training in `DS`.)
+2. Author `model-baseline` container (bias driver + SHAP driver + JSON emitter). Same repo, same CI, same ECR as `model-monitor`.
+3. Rip the Clarify branch out of `AnalyzerBaselineConstruct` in `deploy-repo`. Replace with `BaselineConstruct` referencing the new image. Keep the Model-Monitor MQ / DQ baseline branches intact for the interim if we want, or fold those into `model-baseline` at the same time.
+4. Proof end-to-end on `example_classifier`: run baseline → drop into monitoring S3 path → confirm existing `model-monitor` schedule consumes it and emits identical CW metrics.
 
 Sequence and sizing owned by ML platform lead — not scoped here.
 
@@ -203,12 +203,12 @@ Sequence and sizing owned by ML platform lead — not scoped here.
 
 Explicit non-goals of this proposal. We are **not** rebuilding:
 
-- `ufx-monitor` container ([`MONITORING_CUSTOM_CONTAINER.md`](MONITORING_CUSTOM_CONTAINER.md)) — already the industry pattern.
+- `model-monitor` container ([`MONITORING_CUSTOM_CONTAINER.md`](MONITORING_CUSTOM_CONTAINER.md)) — already the industry pattern.
 - `MonitoringScheduleStack` — EventBridge + SFN schedule that fires the monitor container.
-- `UfxMlMonitoringStack` — dashboards, alarms, DDB outcomes table.
+- `MonitoringStack` — dashboards, alarms, DDB outcomes table.
 - EventBridge Pipes fan-out for ground truth join.
 - CloudWatch dashboards + alarms.
-- Bedrock guardrail for LLM explanation surface ([#204](https://github.com/urbanfoxai/ml-iac/pull/204)).
+- Bedrock guardrail for LLM explanation surface ([#204](https://github.com/<deploy-repo>/pull/204)).
 
 All of the above stays. The change is bounded to the baseline computation side.
 
@@ -234,7 +234,7 @@ analyzer/config/jobconfig.py:129 Unexpected output in the processing job config
 [TODO: verbatim quote from CW logs — ThrottlingException on CreateProcessingJob from parallel bias+explainability fan-out]
 ```
 
-Fill-ins to come from the SFN executions already captured this week — flagged so the Manager knows which UFX incident refs to slot in.
+Fill-ins to come from the SFN executions already captured this week — flagged so the Manager knows which project incident refs to slot in.
 
 ---
 
@@ -251,5 +251,5 @@ Fill-ins to come from the SFN executions already captured this week — flagged 
 - Evidently — [evidentlyai/evidently](https://github.com/evidentlyai/evidently)
 - WhyLabs — [whylabs/whylogs](https://github.com/whylabs/whylogs)
 - Uber — [Meet Michelangelo](https://www.uber.com/blog/michelangelo-machine-learning-platform/)
-- UFX internal — [`docs/MONITORING_CUSTOM_CONTAINER.md`](MONITORING_CUSTOM_CONTAINER.md)
-- UFX internal — [`feature/monitor-container@570a7899` — `ufx-monitor` source](https://github.com/urbanfoxai/ml-iac/tree/570a7899a08696c2495d44589d07ab076cb3efbb/src/monitor_containers/ufx_monitor)
+- the project internal — [`docs/MONITORING_CUSTOM_CONTAINER.md`](MONITORING_CUSTOM_CONTAINER.md)
+- the project internal — [`feature/monitor-container@570a7899` — `model-monitor` source](https://github.com/<deploy-repo>/tree/570a7899a08696c2495d44589d07ab076cb3efbb/containers/model_monitor)

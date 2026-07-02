@@ -1,0 +1,110 @@
+line-length = 120
+target-version = "py312"
+
+[lint]
+
+fixable = ["ALL"]
+preview = true
+
+select = [
+    "A",     # Builtins: shadowing of built-in names
+    "ANN",   # Annotations: presence and correctness of type hints
+    "B",     # Bugbear: likely bugs and design pitfalls
+    "BLE",   # Blind Except: disallow bare or overly broad except
+    "C4",    # Comprehensions: idiomatic comp usage
+    "C90",   # Complexity: cyclomatic complexity limits
+    "COM",   # Commas: missing or superfluous commas
+    "D",     # Docstrings: PEP 257 conventions
+    "DOC",   # PyDoclint: docstring–signature consistency
+    "DTZ",   # Datetimes: enforce timezone-aware datetime usage
+    "E",     # Errors: core PEP 8 violations
+    "ERA",   # Eradicate: commented-out or dead code
+    "F",     # Pyflakes: undefined names, unused imports, redefinitions
+    "I",     # Imports: ordering and grouping
+    "ISC",   # Implicit String Concatenation: unintended joins
+    "N",     # Naming: PEP 8 naming rules
+    "PERF",  # Performance: inefficient idioms
+    "PL",    # Pylint: broad logic and style checks
+    "PTH",   # Pathlib: enforce pathlib over os.path
+    "RET",   # Returns: consistent return statements
+    "RSE",   # Raise: enforce proper exception raising
+    "RUF",   # Ruff: tool-specific extras
+    "S",     # Security: Bandit checks
+    "SIM",   # Simplify: simpler, clearer constructs
+    "T",     # Print/Debug: print, pdb, leftover debugging
+    "TID",   # Tidy Imports: duplicates, unused, style
+    "TRY",   # Tryceratops: exception handling best practices
+    "UP",    # Pyupgrade: modern Python rewrites
+    "W",     # Warnings: complementary PEP 8 warnings
+]
+
+exclude = [
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".venv",
+    "build",
+    "dist",
+    "venv",
+]
+
+ignore = [
+    "COM812",  # Conflicts with formatter's trailing comma handling
+    "TRY003",  # Enforcing exception messages outside raise is too strict for now
+]
+
+[lint.mccabe]
+max-complexity = 10
+
+[lint.pydocstyle]
+convention = "google"
+
+[lint.per-file-ignores]
+"*.ipynb" = ["E501"]
+"**/tests/**/*.py" = [
+    "ANN",     # Type hints not required in tests
+    "D",       # Docstrings not required in tests
+    "DOC",     # Docstring strictness not applied to tests
+    "FBT",     # Boolean args are common in parametrize
+    "PLC0415", # Imports inside test functions are a legitimate testing pattern
+    "PLC1901", # Explicit == "" checks are intentional for asserting empty strings
+    "PLC2701", # Importing private names is needed for white-box testing
+    "PLR0904", # Test classes naturally have many test methods
+    "PLR0913", # Pytest fixtures lead to many function arguments
+    "PLR0917", # Pytest fixtures lead to many positional arguments
+    "PLR2004", # Magic values in assertions are intentional
+    "PLR6301", # Methods that could be functions (fixture classes)
+    "S101",    # Asserts are how pytest works
+    "S105",    # Hardcoded passwords are expected in test fixtures
+    "S106",    # Hardcoded passwords are expected in test fixtures
+    "T201",    # print() is useful for test debugging
+    "TRY301",  # Raising inside try is intentional for testing exception handling
+]
+"**/suites/**/*.py" = [
+    "ANN",     # Type hints not required in tests
+    "D",       # Docstrings not required in tests
+    "DOC",     # Docstring strictness not applied to tests
+    "DTZ",     # Timezone-aware datetimes are not critical in test contexts
+    "FBT",     # Boolean args are common in parametrize
+    "N802",    # ST-NNN test names use uppercase — deliberate smoke test plan ID traceability
+    "N999",    # ST-NNN module names use uppercase — same reason
+    "PLC0415", # Imports inside test functions are a legitimate testing pattern
+    "PLC1901", # Explicit == "" checks are intentional for asserting empty strings
+    "PLC2701", # Importing private names is needed for white-box testing
+    "PLR0904", # Test classes naturally have many test methods
+    "PLR0913", # Pytest fixtures lead to many function arguments
+    "PLR0915", # E2e test flows are inherently long and procedural
+    "PLR0917", # Pytest fixtures lead to many positional arguments
+    "PLR2004", # Magic values in assertions are intentional
+    "PLR6301", # Methods that could be functions (fixture classes)
+    "S101",    # Asserts are how pytest works
+    "S105",    # Hardcoded passwords are expected in test fixtures
+    "S106",    # Hardcoded passwords are expected in test fixtures
+    "T201",    # print() is useful for test debugging
+    "TRY301",  # Raising inside try is intentional for testing exception handling
+]
+
+[format]
+quote-style = "double"
+skip-magic-trailing-comma = false
+docstring-code-format = true

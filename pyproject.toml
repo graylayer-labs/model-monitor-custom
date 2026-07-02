@@ -1,0 +1,27 @@
+# Workspace root — no code lives here directly. Each container + the CDK library
+# is its own package under containers/*/pyproject.toml and cdk/pyproject.toml.
+#
+# This file exists so `uv run <tool>` at the repo root resolves shared dev tooling
+# (ruff, pyright, ty, pytest) against a single set of dependencies.
+
+[project]
+name = "model-monitor-custom-workspace"
+version = "0.0.0"
+description = "Workspace for the model-monitor-custom project. Not a distributable package."
+requires-python = ">=3.12"
+readme = "README.md"
+license = "Apache-2.0"
+authors = [{ name = "Eoin McArdle" }]
+
+# Dev-only. Each package pins its own runtime deps in its own pyproject.toml.
+[dependency-groups]
+dev = [
+    "ruff>=0.14.1",
+    "ty>=0.0.1a17",
+    "pytest>=9.0.0",
+    "pytest-cov>=5.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["containers", "cdk", "tests"]
+addopts = "-ra --strict-markers"

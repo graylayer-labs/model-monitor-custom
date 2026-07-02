@@ -1,17 +1,17 @@
-# `ufx-baseline` — Custom Baseline Compute Container Design
+# `model-baseline` — Custom Baseline Compute Container Design
 
-> Status: Draft design proposal. Author: research spawned by UFX Manager. Date: 2026-07-02.
+> Status: Draft design proposal. Author: research spawned by the maintainer. Date: 2026-07-02.
 > Companion doc: [`SM_MODEL_MONITOR_ASSESSMENT.md`](SM_MODEL_MONITOR_ASSESSMENT.md) — the honest assessment of why we are doing this.
-> Sibling container this mirrors: [`src/monitor_containers/ufx_monitor/`](../../monitoring-custom-container-explore/src/monitor_containers/ufx_monitor) on `feature/monitor-container`.
-> Target consumer: [`analyzer_baseline_construct.py`](../../monitoring-custom-container-explore/src/stacks/ufx_ml_monitoring_stack/constructs/analyzer_baseline_construct.py) — the Clarify branch is the thing we are replacing.
+> Sibling container this mirrors: [`containers/model_monitor/`](../../monitoring-custom-container-explore/containers/model_monitor) on `feature/monitor-container`.
+> Target consumer: [`analyzer_baseline_construct.py`](../../monitoring-custom-container-explore/cdk/src/model_monitor_cdk/constructs/analyzer_baseline_construct.py) — the Clarify branch is the thing we are replacing.
 
 ---
 
 ## 0. TL;DR
 
-Replace the two SageMaker Clarify Processing Job branches (Bias + Explainability) inside `AnalyzerBaselineConstruct` with a new `UfxBaselineConstruct` that launches a self-owned image, `ufx-baseline`. Same SFN. Same EventBridge trigger. Same S3 output paths and `analysis.json` shape. Different image URI, different container args, different IAM policy. ~350-450 LOC of container Python. ~120 LOC of CDK. Removes every §3 pain point in the assessment doc and lands us on AWS's own 2026 recommended pattern.
+Replace the two SageMaker Clarify Processing Job branches (Bias + Explainability) inside `AnalyzerBaselineConstruct` with a new `BaselineConstruct` that launches a self-owned image, `model-baseline`. Same SFN. Same EventBridge trigger. Same S3 output paths and `analysis.json` shape. Different image URI, different container args, different IAM policy. ~350-450 LOC of container Python. ~120 LOC of CDK. Removes every §3 pain point in the assessment doc and lands us on AWS's own 2026 recommended pattern.
 
-Non-goals: rebuilding `ufx-monitor`, `MonitoringScheduleStack`, `UfxMlMonitoringStack`, GT pipes, dashboards, alarms. Non-goals list matches assessment §8.
+Non-goals: rebuilding `model-monitor`, `MonitoringScheduleStack`, `MonitoringStack`, GT pipes, dashboards, alarms. Non-goals list matches assessment §8.
 
 ---
 
@@ -30,7 +30,7 @@ Each entry: what it is, install size, license, Python compatibility, maintenance
 - **Post-training metrics**: `DPPL`, `DI` (Disparate Impact), `DCA`, `DCO`, `RD`, `DLR`, `AD`, `TE`, `FT`, `CDDPL`.
 - **Install size.** Wheel ~90 KB. Dependencies: `pandas`, `numpy`, `scipy`, `pyfunctional`, `pyarrow`. Total transitive install ~140 MB uncompressed (dominated by pandas + pyarrow).
 - **License.** Apache-2.0.
-- **Python compatibility.** Declared support Python 3.8+; imports and runtime use nothing that would break under Python 3.12. Confirmed importable in the `ufx_monitor` container's 3.12-slim base.
+- **Python compatibility.** Declared support Python 3.8+; imports and runtime use nothing that would break under Python 3.12. Confirmed importable in the `model_monitor` container's 3.12-slim base.
 - **Maintenance activity.** Last tagged release `0.5` (April 4, 2023). 4 open issues, 0 open PRs. 138 total commits. Low activity — but that is fine: the library is a fixed set of arithmetic formulas that don't rot. Every dependency (`pandas`, `numpy`, `scipy`) is under aggressive independent maintenance and `smclarify` slots on top of them.
 - **Production users.** AWS Clarify itself (closed-source container) is the reference user. No known third-party public writeups since AWS's 2026-06-30 Clarify wind-down announcement pointed customers at "smclarify or reimplement the formulas yourself."
 - **Dependency traps.** None found in a 30-min audit. `pyfunctional` and `pyarrow` are the two heaviest transitive deps; both are widely deployed and stable.
@@ -45,7 +45,7 @@ Each entry: what it is, install size, license, Python compatibility, maintenance
   - `DeepExplainer` — designed for TensorFlow/Keras. "Preliminary PyTorch support" per docs — the PyTorch path has been known-buggy for RNNs specifically, wraps around `torch.autograd`. **Risk-heavy** for a first shipping version.
   - `GradientExplainer` — expected-gradients approach for TF/Keras/PyTorch. Works for PyTorch. Not standard in Clarify — no downstream shape compatibility.
   - `KernelExplainer` — model-agnostic. Takes any callable `model(X) -> [n, n_classes]`. Slower (O(nsamples · background)), but the safe choice for our model class. **This is what Clarify uses internally when the model is not a native tree/linear.**
-- **Recommendation for BOS_SEQ (BiGRU + attention, multiclass 3-way).** `KernelExplainer` with a `predict_proba`-shaped wrapper around the loaded PyTorch model. `shap.kmeans(background, K=50)` to summarize the background set (see A.2 background sizing below). Nsamples = 100 initially; expand as runtime allows.
+- **Recommendation for EXAMPLE_MODEL (BiGRU + attention, multiclass 3-way).** `KernelExplainer` with a `predict_proba`-shaped wrapper around the loaded PyTorch model. `shap.kmeans(background, K=50)` to summarize the background set (see A.2 background sizing below). Nsamples = 100 initially; expand as runtime allows.
 - **Install size.** Source dist `shap-0.52.0.tar.gz` ~4.2 MB. Wheels 490 KB (manylinux) – 1.6 MB (musllinux). Runtime deps: `numpy`, `scipy`, `scikit-learn`, `pandas`, `tqdm`, `packaging`, `slicer`, `cloudpickle`, `numba`. **`numba` is the heavy one** — ~90 MB installed, JIT-compiles at import time (~2s cold-start), pulls `llvmlite` (~50 MB more).
 - **License.** MIT.
 - **Python compatibility.** Latest `shap==0.52.0` requires Python 3.12+. Perfect for us.
@@ -57,18 +57,18 @@ Each entry: what it is, install size, license, Python compatibility, maintenance
 ### A.3 `evidently` — full drift + bias + reporting
 
 - **What it does.** Full ML-monitoring library: 100+ metrics across drift, data quality, classification, regression, LLM/text, RAG.
-- **Overlap with our need.** Data-drift and data-quality overlap heavily with what `ufx-monitor`'s DQ analyzer already computes; bias overlap is partial (evidently emits `Bias` under classification metrics but not the full SageMaker Clarify metric set). No feature-attribution / SHAP support — Evidently docs explicitly recommend pairing with `shap` for that.
+- **Overlap with our need.** Data-drift and data-quality overlap heavily with what `model-monitor`'s DQ analyzer already computes; bias overlap is partial (evidently emits `Bias` under classification metrics but not the full SageMaker Clarify metric set). No feature-attribution / SHAP support — Evidently docs explicitly recommend pairing with `shap` for that.
 - **Install size.** ~40 MB wheel + pandas + scipy + plotly transitive. Total ~250 MB installed.
 - **License.** Apache-2.0.
 - **Python compatibility.** 3.9+ per current pyproject.
 - **Maintenance activity.** 7.7k stars, 2,795 commits, latest release `v0.7.21` (March 2026), 872 forks. Very active.
-- **Verdict.** **Don't adopt for baseline compute.** Evidently is a scheduled-drift comparison library (reference vs. current), which is what `ufx-monitor` already does. Baseline compute is one-shot statistic emission — a smaller, simpler surface. Keeping it out avoids: (a) an extra 250 MB in every image, (b) a second config surface (evidently `Report` schema is its own DSL), and (c) coupling the baseline shape to evidently's output. Revisit for the `ufx-monitor` side of the house if we ever want to replace our hand-rolled DQ analyzer.
+- **Verdict.** **Don't adopt for baseline compute.** Evidently is a scheduled-drift comparison library (reference vs. current), which is what `model-monitor` already does. Baseline compute is one-shot statistic emission — a smaller, simpler surface. Keeping it out avoids: (a) an extra 250 MB in every image, (b) a second config surface (evidently `Report` schema is its own DSL), and (c) coupling the baseline shape to evidently's output. Revisit for the `model-monitor` side of the house if we ever want to replace our hand-rolled DQ analyzer.
 - URL: [evidentlyai/evidently](https://github.com/evidentlyai/evidently)
 
 ### A.4 `whylogs` — streaming profiles
 
 - **What it does.** Data logging library. Emits compact, mergeable statistical profiles (streaming sketches — HLL, KLL, count-min, etc.) rather than full statistics.
-- **Where it would fit.** Excellent for the inference-time-capture side (`ufx-monitor`'s live analyzer), where per-row logging cost matters. **Poor fit** for baseline compute — baseline is a one-shot batch, no need for mergeable sketches.
+- **Where it would fit.** Excellent for the inference-time-capture side (`model-monitor`'s live analyzer), where per-row logging cost matters. **Poor fit** for baseline compute — baseline is a one-shot batch, no need for mergeable sketches.
 - **Install size.** ~15 MB wheel + protobuf + datasketches transitive. Total ~80 MB installed.
 - **License.** Apache-2.0.
 - **Maintenance.** 2.8k stars, 936 commits, latest v1.6.4 (Dec 2024), 173 releases. Active.
@@ -85,7 +85,7 @@ Each entry: what it is, install size, license, Python compatibility, maintenance
 | `fairlearn` | Microsoft's fairness library. Non-SageMaker Clarify formulas — different metric-name space. Would break `analysis.json` shape compat. Skip. |
 | `captum` | PyTorch-native attribution (integrated gradients, layer conductance). Better than SHAP for RNNs *if* we accept a per-model wrapper. Deferred to Part F.2 for reconsideration in a follow-up if `KernelExplainer` runtime bites. |
 
-**Chosen library set for `ufx-baseline`:**
+**Chosen library set for `model-baseline`:**
 
 ```
 smclarify         # bias metrics (Clarify-compatible output)
@@ -94,26 +94,26 @@ torch             # model load
 scikit-learn      # shap.kmeans background summarisation, ColumnTransformer for feature encoding
 pandas / numpy    # data prep — smclarify takes DataFrames
 boto3             # S3 + STS
-pydantic          # config parsing (matches ufx_monitor)
+pydantic          # config parsing (matches model_monitor)
 ```
 
-Everything else declared in `analysis_config.json` today (JMESPath fields, `content_template`, etc.) is deleted from ml-core once the cutover completes — those exist only to satisfy the closed-source Clarify container.
+Everything else declared in `analysis_config.json` today (JMESPath fields, `content_template`, etc.) is deleted from train-repo once the cutover completes — those exist only to satisfy the closed-source Clarify container.
 
 ---
 
 ## Part B — Container design
 
-### B.1 File layout under `src/monitor_containers/ufx_baseline/`
+### B.1 File layout under `containers/model_baseline/`
 
-Mirror `ufx_monitor/` shape. One-to-one where possible so anyone who reads `ufx_monitor` can navigate `ufx_baseline`.
+Mirror `model_monitor/` shape. One-to-one where possible so anyone who reads `model_monitor` can navigate `model_baseline`.
 
 ```
-src/monitor_containers/ufx_baseline/
+containers/model_baseline/
 ├── Dockerfile
 ├── entrypoint.sh
 ├── pyproject.toml
 ├── README.md
-├── ufx_baseline/
+├── model_baseline/
 │   ├── __init__.py
 │   ├── cli.py                    # env-driven entrypoint, dispatches to analyzer
 │   ├── schemas.py                # BaselineType enum, ContainerEnv, AnalysisConfig (pydantic)
@@ -131,7 +131,7 @@ src/monitor_containers/ufx_baseline/
 │   └── model_adapters/
 │       ├── __init__.py
 │       ├── base.py               # ModelAdapter protocol — model + predict_proba(X)
-│       └── bos_seq.py            # BiGRU-specific adapter reusing ml-core inference.model_fn
+│       └── example_model.py            # BiGRU-specific adapter reusing train-repo inference.model_fn
 └── tests/
     ├── conftest.py
     ├── analyzers/
@@ -144,27 +144,27 @@ src/monitor_containers/ufx_baseline/
     └── test_cli.py               # env-driven dispatch + failure.json sidecar path
 ```
 
-Key differences from `ufx_monitor/`:
+Key differences from `model_monitor/`:
 - No `filters/` — the input is already scoped to one baseline artefact.
 - No `join/` — bias and explainability read a single dataset; there's no capture-vs-GT stream join.
-- Extra `model_adapters/` — SHAP needs a live callable; per-project model-load stays isolated in one file per model. First adapter: `bos_seq`. Second (agg XGB): `bos_agg` — trivial, `TreeExplainer` path. See B.6.
+- Extra `model_adapters/` — SHAP needs a live callable; per-project model-load stays isolated in one file per model. First adapter: `example_model`. Second (agg XGB): `bos_agg` — trivial, `TreeExplainer` path. See B.6.
 
 ### B.2 Dockerfile
 
 Base image discussion:
 
-- **`python:3.12-slim`** (what `ufx_monitor` uses). ~40 MB base, minimal surface. Chosen for parity — same base image means same `libgomp1` gotcha, same `uv` layer cache, same familiar package pinning.
+- **`python:3.12-slim`** (what `model_monitor` uses). ~40 MB base, minimal surface. Chosen for parity — same base image means same `libgomp1` gotcha, same `uv` layer cache, same familiar package pinning.
 - **SageMaker base image** (e.g. `763104351884.dkr.ecr.<region>.amazonaws.com/pytorch-training:2.x`). ~5 GB. Ships PyTorch + CUDA + Miniconda pre-baked. **Rejected** — CUDA is useless for CPU-only `KernelExplainer`, and the size makes CI push slow.
 - **`debian:12-slim`** without Python. Would need to install Python 3.12 ourselves. No benefit over `python:3.12-slim`.
 
 **Chosen: `python:3.12-slim`.**
 
-Additional apt packages: `libgomp1` (already needed by `ufx_monitor` for lightgbm — `smclarify` transitive doesn't need it but `shap` uses `numba` which links against `libgomp`; keeping it in avoids a "why is CI red" moment). Everything else in the deps list is pure-Python or ships manylinux wheels.
+Additional apt packages: `libgomp1` (already needed by `model_monitor` for lightgbm — `smclarify` transitive doesn't need it but `shap` uses `numba` which links against `libgomp`; keeping it in avoids a "why is CI red" moment). Everything else in the deps list is pure-Python or ships manylinux wheels.
 
 Target image size: **≤ 1.2 GB compressed**. Torch alone is ~800 MB; if that bites we can move to `torch==2.x --index-url https://download.pytorch.org/whl/cpu` which is ~200 MB — recommended in Part E for cost.
 
 ```dockerfile
-# src/monitor_containers/ufx_baseline/Dockerfile
+# containers/model_baseline/Dockerfile
 FROM python:3.12-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -189,7 +189,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev
 
 # --- code layer ---
-COPY ufx_baseline ./ufx_baseline
+COPY model_baseline ./model_baseline
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
@@ -208,7 +208,7 @@ Rationale for layer order: `pyproject.toml + uv.lock` change rarely, dep resolve
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
-exec python -m ufx_baseline.cli "$@"
+exec python -m model_baseline.cli "$@"
 ```
 
 ### B.3 Entrypoint contract
@@ -222,7 +222,7 @@ Env vars consumed by `cli.py`:
 | `PACKAGE_GROUP_NAME` | yes | MPG name — emitted into `_provenance.json`, used in log preamble. |
 | `BASELINE_VERSION` | yes | Integer version segment. Emitted into provenance. |
 | `MONITOR_TYPE` | yes | `bias` \| `explainability`. Selects analyzer. |
-| `MODEL_ADAPTER` | yes for `explainability` | Which `model_adapters/` module to load. E.g. `bos_seq`. Needed because different models unpack differently. |
+| `MODEL_ADAPTER` | yes for `explainability` | Which `model_adapters/` module to load. E.g. `example_model`. Needed because different models unpack differently. |
 | `MODEL_S3_URI` | yes for `explainability` | `s3://.../model.tar.gz` — downloaded, unpacked, adapter-loaded. Not needed for bias (bias reads labels + predictions from the dataset). |
 | `INPUT_DATA_DIR` | optional | Default `/opt/ml/processing/input/data`. |
 | `INPUT_CONFIG_DIR` | optional | Default `/opt/ml/processing/input/config`. |
@@ -241,17 +241,17 @@ Notes:
 Options:
 
 **Option A — Keep Clarify's `analysis_config.json` shape verbatim.**
-Pros: zero ml-core change; existing `emit_baseline_inputs.py` output for the Clarify path continues to work; the moment we cut over CDK-side, the Python code just reads a JSON we already emit.
+Pros: zero train-repo change; existing `emit_baseline_inputs.py` output for the Clarify path continues to work; the moment we cut over CDK-side, the Python code just reads a JSON we already emit.
 Cons: we inherit the shape warts flagged in §3b of the assessment (`content_template` requiring literal `$features`, `label_headers` semantics, JMESPath in `features` field). Those warts exist to feed the closed-source container; they add zero value to us.
 
-**Option B — Design a cleaner UFX-owned schema, adapt ml-core to emit it.**
+**Option B — Design a cleaner the project-owned schema, adapt train-repo to emit it.**
 Pros: only carry the fields we actually use — `label_column`, `facet_columns`, `predicted_label_column`, `positive_label_values`, `class_labels`, `shap` block with `nsamples` + `background_size` + `feature_columns`.
-Cons: coordinated change ml-iac + ml-core; two config schemas in flight during Phase 2 parallel-run.
+Cons: coordinated change deploy-repo + train-repo; two config schemas in flight during Phase 2 parallel-run.
 
 **Recommendation: Option B, with a transitional reader.**
 
 ```python
-# ufx_baseline/io/config.py
+# model_baseline/io/config.py
 from pydantic import BaseModel, Field
 
 class ShapConfig(BaseModel):
@@ -260,8 +260,8 @@ class ShapConfig(BaseModel):
     feature_columns: list[str]
     class_labels: list[str] | None = None
 
-class UfxBaselineConfig(BaseModel):
-    """UFX-native baseline config. Emitted by ml-core's baseline emitter.
+class BaselineConfig(BaseModel):
+    """the project-native baseline config. Emitted by train-repo's baseline emitter.
 
     Attributes:
         schema_version: Bumped when we change the shape (start at 1).
@@ -288,19 +288,19 @@ class UfxBaselineConfig(BaseModel):
 Transitional reader (during Phase 2 parallel-run):
 
 ```python
-def load_config(config_dir: Path) -> UfxBaselineConfig:
-    """Load the UFX baseline config, tolerating the transitional Clarify shape.
+def load_config(config_dir: Path) -> BaselineConfig:
+    """Load the the project baseline config, tolerating the transitional Clarify shape.
 
     Reads ``analysis_config.json`` from ``config_dir``. If the JSON contains a
-    ``schema_version`` key, parse as :class:`UfxBaselineConfig`. Otherwise,
-    project the Clarify shape onto the UFX shape (documented mapping table
+    ``schema_version`` key, parse as :class:`BaselineConfig`. Otherwise,
+    project the Clarify shape onto the the project shape (documented mapping table
     below) and log a deprecation warning.
 
     Args:
         config_dir: Directory containing ``analysis_config.json``.
 
     Returns:
-        UfxBaselineConfig populated from either shape.
+        BaselineConfig populated from either shape.
 
     Raises:
         FileNotFoundError: When ``analysis_config.json`` is missing.
@@ -310,7 +310,7 @@ def load_config(config_dir: Path) -> UfxBaselineConfig:
 
 Mapping table for the transitional reader:
 
-| Clarify field | UFX field |
+| Clarify field | the project field |
 |---|---|
 | `label` | `label_column` |
 | `predicted_label` | `predicted_label_column` |
@@ -327,11 +327,11 @@ Mapping table for the transitional reader:
 `smclarify.bias.report.bias_report` takes a DataFrame + facet/label columns + stage type. Wrap it thinly.
 
 ```python
-# ufx_baseline/analyzers/bias.py
+# model_baseline/analyzers/bias.py
 from dataclasses import dataclass
 import pandas as pd
 from smclarify.bias.report import bias_report, FacetColumn, LabelColumn, StageType
-from ufx_baseline.schemas import BaselineResult
+from model_baseline.schemas import BaselineResult
 
 @dataclass(frozen=True)
 class BiasAnalyzer:
@@ -395,7 +395,7 @@ class BiasAnalyzer:
         return BaselineResult(analysis=analysis)
 ```
 
-**Multi-class positive-label sets.** `smclarify` accepts a list — `positive_label_values=["Bot"]` treats "Bot" as favourable and folds the other two classes into the disfavoured group. For UFX BOS_SEQ we want to run three bias reports — one per class — each with a single-element positive list. The wrapper loops:
+**Multi-class positive-label sets.** `smclarify` accepts a list — `positive_label_values=["Bot"]` treats "Bot" as favourable and folds the other two classes into the disfavoured group. For the project EXAMPLE_MODEL we want to run three bias reports — one per class — each with a single-element positive list. The wrapper loops:
 
 ```python
 if problem_type == "MulticlassClassification":
@@ -404,7 +404,7 @@ if problem_type == "MulticlassClassification":
         # analysis["pre_training_bias_metrics"][facet][cls]
 ```
 
-**Output shape.** We choose to mirror Clarify's `analysis.json` structure **at the top level** so `ufx_monitor/analyzers/bias.py:read_analysis` (already parses `analysis.json` from the current Clarify path) needs no change. Downstream compatibility → zero drift.
+**Output shape.** We choose to mirror Clarify's `analysis.json` structure **at the top level** so `model_monitor/analyzers/bias.py:read_analysis` (already parses `analysis.json` from the current Clarify path) needs no change. Downstream compatibility → zero drift.
 
 Reference: [`analysis.json` shape](https://docs.aws.amazon.com/sagemaker/latest/dg/clarify-config-json-analysis.html).
 
@@ -439,7 +439,7 @@ Reference: [`analysis.json` shape](https://docs.aws.amazon.com/sagemaker/latest/
 ### B.6 EXPLAINABILITY analyzer — SHAP wrapper
 
 ```python
-# ufx_baseline/analyzers/explainability.py
+# model_baseline/analyzers/explainability.py
 from dataclasses import dataclass
 from typing import Callable
 import numpy as np
@@ -508,7 +508,7 @@ Deterministic seed on background sampling and explain-sample selection so re-run
 
 ### B.7 Model loading
 
-The BiGRU inference handler at [`~/UFX/ML/ml-core/projects/bos_sess_seq_clf/src/inference.py`](../../../../ml-core/projects/bos_sess_seq_clf/src/inference.py) implements the four SageMaker handlers:
+The BiGRU inference handler at [`~/the project/ML/train-repo/projects/example_classifier/src/inference.py`](../../../../train-repo/projects/example_classifier/src/inference.py) implements the four SageMaker handlers:
 
 ```
 model_fn(model_dir)  -> ModelBundle(model, preprocessor, id_to_label, feature_cols)
@@ -517,14 +517,14 @@ predict_fn(input_data, model_bundle)
 output_fn(prediction, accept)
 ```
 
-**Decision: reuse `model_fn` from ml-core.** Copying/re-implementing model-load logic in ml-iac creates the exact drift the SYSTEM `Known Gaps` warns about. Instead, publish ml-core's `bos_sess_seq_clf` package to a private ECR-adjacent artefact or vendor a minimal subset (the `model_fn` + supporting `models/model.py`).
+**Decision: reuse `model_fn` from train-repo.** Copying/re-implementing model-load logic in deploy-repo creates the exact drift the SYSTEM `Known Gaps` warns about. Instead, publish train-repo's `example_classifier` package to a private ECR-adjacent artefact or vendor a minimal subset (the `model_fn` + supporting `models/model.py`).
 
 Concrete approach — vendor via **git subtree or Poetry-style path dependency**:
 
-- `ufx_baseline/model_adapters/bos_seq.py` — thin shim:
+- `model_baseline/model_adapters/example_model.py` — thin shim:
   ```python
-  from bos_sess_seq_clf.inference import model_fn  # vendored path dep or pip
-  from ufx_baseline.model_adapters.base import ModelAdapter
+  from example_classifier.inference import model_fn  # vendored path dep or pip
+  from model_baseline.model_adapters.base import ModelAdapter
   import numpy as np, torch
 
   class BosSeqAdapter(ModelAdapter):
@@ -534,9 +534,8 @@ Concrete approach — vendor via **git subtree or Poetry-style path dependency**
       def predict_proba(self, X: np.ndarray) -> np.ndarray:
           """SHAP feeds flat [n, f]. We wrap into the model's expected shape.
 
-          BOS_SEQ takes session-aggregate features (per this week's flatten fix
-          from squad ml-core BOS_SEQ baseline flattener). No sequence reshape
-          needed — each row is one session.
+          When the underlying model takes session-aggregate flat features, no
+          sequence reshape is needed — each row is one instance.
           """
           X_processed = self.bundle.preprocessor.transform(pd.DataFrame(X, columns=self.feature_cols))
           tensor = torch.as_tensor(X_processed, dtype=torch.float32)
@@ -560,7 +559,7 @@ The whole point of this rewrite is that Clarify's failure mode was a single-line
      {
        "schema_version": 1,
        "monitor_type": "bias",
-       "package_group_name": "bos-sess-seq-clf",
+       "package_group_name": "example-classifier",
        "baseline_version": 3,
        "phase": "compute" | "config-load" | "dataset-load" | "model-load" | "output-write",
        "error_class": "ValueError",
@@ -572,7 +571,7 @@ The whole point of this rewrite is that Clarify's failure mode was a single-line
      }
      ```
 - **Halt on schema errors** (config parse fail, missing columns, empty dataset). Exit 1. SFN catches the ProcessingJob failure and routes to the SNS `PublishFailure` step (already wired in `analyzer_baseline_construct.py`).
-- **Skip analyzers that fail but continue the rest** — not applicable here because a baseline run is one analyzer per job (`MONITOR_TYPE=bias` or `explainability`), unlike `ufx-monitor` which bundles multiple. If we later fold MQ/DQ baseline into the same container (Part D.4), we would inherit `ufx-monitor`'s per-analyzer isolation model.
+- **Skip analyzers that fail but continue the rest** — not applicable here because a baseline run is one analyzer per job (`MONITOR_TYPE=bias` or `explainability`), unlike `model-monitor` which bundles multiple. If we later fold MQ/DQ baseline into the same container (Part D.4), we would inherit `model-monitor`'s per-analyzer isolation model.
 
 Exit codes (contract with SFN):
 
@@ -586,14 +585,14 @@ Exit codes (contract with SFN):
 
 ## Part C — Infra integration
 
-### C.1 CDK construct — `UfxBaselineConstruct`
+### C.1 CDK construct — `BaselineConstruct`
 
 Two clean options:
 
-**Option 1 — Add UFX branches inside existing `AnalyzerBaselineConstruct`.**
-Small diff (~80 LOC). Preserves single dispatch point for all four monitor types. Downside: mixes closed-source Clarify config knobs with UFX config knobs in the same file during Phase 2 parallel-run.
+**Option 1 — Add the project branches inside existing `AnalyzerBaselineConstruct`.**
+Small diff (~80 LOC). Preserves single dispatch point for all four monitor types. Downside: mixes closed-source Clarify config knobs with the project config knobs in the same file during Phase 2 parallel-run.
 
-**Option 2 — New `UfxBaselineConstruct` class, referenced from `AnalyzerBaselineConstruct` only for `MonitorType.BIAS` and `MonitorType.EXPLAINABILITY`.**
+**Option 2 — New `BaselineConstruct` class, referenced from `AnalyzerBaselineConstruct` only for `MonitorType.BIAS` and `MonitorType.EXPLAINABILITY`.**
 Larger diff (~180 LOC). Cleaner separation. Kills Clarify branches outright at Phase 3.
 
 **Recommendation: Option 2.** The Clarify branches are going away — building the new construct as a peer, then deleting the old branches, is the cleaner arc. The SFN/EventBridge scaffolding (Validate → CreateProcessingJob.sync → HeadObject → Succeed with SNS-on-fail branch) is reused, just with a different image URI, container args, and IAM. Extract that scaffolding to a helper method `_build_processing_state_machine(image_uri, container_args, env, resources)` that both constructs call.
@@ -602,23 +601,23 @@ Files to edit:
 
 | File | Change |
 |---|---|
-| `src/stacks/ufx_ml_monitoring_stack/constructs/analyzer_baseline_construct.py` | Route `BIAS`/`EXPLAINABILITY` to `UfxBaselineConstruct`. Delete `_CLARIFY_TYPES`, `_CLARIFY_IMAGE_BY_REGION`, and the Clarify branch of `_processing_inputs` / `_job_runtime_spec` once Phase 3 lands. |
-| `src/stacks/ufx_ml_monitoring_stack/constructs/ufx_baseline_construct.py` | **New.** Peer class. Reuses the SFN scaffolding pattern. |
-| `src/stacks/ufx_ml_monitoring_stack/constructs/__init__.py` | Export the new construct. |
-| `src/common/monitor_containers/build_config.py` | New — image URI helper, mirrors the existing `ufx_monitor` image-URI resolver. |
-| `src/common/inference_deployments/monitoring_configs.py` | Add `UfxBaselineConfig` pydantic model (name TBD to avoid clash with container's `UfxBaselineConfig`; likely `UfxBaselineCdkConfig`). |
-| `.github/workflows/build-ufx-baseline-image.yml` | **New.** Mirrors the existing `build-ufx-monitor-image.yml`. |
-| `src/stacks/ufx_ml_monitoring_stack/README.md` | Document the new dispatch matrix. |
+| `cdk/src/model_monitor_cdk/constructs/analyzer_baseline_construct.py` | Route `BIAS`/`EXPLAINABILITY` to `BaselineConstruct`. Delete `_CLARIFY_TYPES`, `_CLARIFY_IMAGE_BY_REGION`, and the Clarify branch of `_processing_inputs` / `_job_runtime_spec` once Phase 3 lands. |
+| `cdk/src/model_monitor_cdk/constructs/model_baseline_construct.py` | **New.** Peer class. Reuses the SFN scaffolding pattern. |
+| `cdk/src/model_monitor_cdk/constructs/__init__.py` | Export the new construct. |
+| `src/common/monitor_containers/build_config.py` | New — image URI helper, mirrors the existing `model_monitor` image-URI resolver. |
+| `src/common/inference_deployments/monitoring_configs.py` | Add `BaselineConfig` pydantic model (name TBD to avoid clash with container's `BaselineConfig`; likely `BaselineCdkConfig`). |
+| `.github/workflows/build-model-baseline-image.yml` | **New.** Mirrors the existing `build-model-monitor-image.yml`. |
+| `cdk/src/model_monitor_cdk/README.md` | Document the new dispatch matrix. |
 
 Pseudocode for the new construct:
 
 ```python
-# src/stacks/ufx_ml_monitoring_stack/constructs/ufx_baseline_construct.py
-class UfxBaselineConstruct(Construct):
-    """Bias / Explainability baseline via UFX-owned container.
+# cdk/src/model_monitor_cdk/constructs/model_baseline_construct.py
+class BaselineConstruct(Construct):
+    """Bias / Explainability baseline via the project-owned container.
 
     Same SFN topology as ``AnalyzerBaselineConstruct`` uses for MQ/DQ, but the
-    Processing Job launches ``ufx-baseline`` from ML_ARTIFACT ECR instead of
+    Processing Job launches ``model-baseline`` from ML_ARTIFACT ECR instead of
     the AWS-published Clarify image.
 
     Attributes:
@@ -641,17 +640,17 @@ class UfxBaselineConstruct(Construct):
         model_artefact_bucket: IBucket,          # NEW — where model.tar.gz lives
         model_artefact_key: str,                 # NEW — full key to the model.tar.gz
         config: BiasConfig | ExplainabilityConfig,
-        image_uri: str,                          # ML_ARTIFACT ECR — ufx-baseline
+        image_uri: str,                          # ML_ARTIFACT ECR — model-baseline
         alerts_topic: ITopic | None = None,
     ) -> None:
         assert monitor_type in {MonitorType.BIAS, MonitorType.EXPLAINABILITY}
         # ... construct role, state machine, event rule ...
 
     def _job_environment(self) -> dict[str, str]:
-        """UFX-baseline env block passed as CreateProcessingJob Environment.
+        """the project-baseline env block passed as CreateProcessingJob Environment.
 
         Returns:
-            Env dict consumed by ufx_baseline.cli._load_env.
+            Env dict consumed by model_baseline.cli._load_env.
         """
         env = {
             "PACKAGE_GROUP_NAME": self.package_group_name,
@@ -659,7 +658,7 @@ class UfxBaselineConstruct(Construct):
             "MONITOR_TYPE": self.monitor_type.value,
         }
         if self.monitor_type is MonitorType.EXPLAINABILITY:
-            env["MODEL_ADAPTER"] = self.config.model_adapter          # e.g. "bos_seq"
+            env["MODEL_ADAPTER"] = self.config.model_adapter          # e.g. "example_model"
             env["MODEL_S3_URI"] = f"s3://{self.model_artefact_bucket.bucket_name}/{self.model_artefact_key}"
             env["SHAP_NSAMPLES"] = str(self.config.shap_nsamples)
             env["SHAP_BACKGROUND_K"] = str(self.config.shap_background_k)
@@ -667,7 +666,7 @@ class UfxBaselineConstruct(Construct):
 ```
 
 The SFN definition is a straight lift of the existing `_create_state_machine` in `AnalyzerBaselineConstruct` — reuse the helper. Only differences:
-- `AppSpecification.ImageUri` — points at ML_ARTIFACT ECR `ufx-baseline`.
+- `AppSpecification.ImageUri` — points at ML_ARTIFACT ECR `model-baseline`.
 - `ContainerArguments` — none (env-driven).
 - `Environment` — the dict above.
 - `ProcessingInputs` — one channel `dataset` at `/opt/ml/processing/input/data`, one channel `analysis_config` at `/opt/ml/processing/input/config`. Same shape Clarify already gets.
@@ -755,33 +754,33 @@ For the pre-migration era where the model artefact still lives in `DS` (`7144625
 {
   "Sid": "AllowMLArtifactBaselineRead",
   "Effect": "Allow",
-  "Principal": {"AWS": "arn:aws:iam::965377249924:role/UfxBaseline-*"},
+  "Principal": {"AWS": "arn:aws:iam::965377249924:role/Baseline-*"},
   "Action": ["s3:GetObject"],
-  "Resource": "arn:aws:s3:::{ds-model-bucket}/models/bos_sess_seq_clf/{version}/model.tar.gz"
+  "Resource": "arn:aws:s3:::{ds-model-bucket}/models/example_classifier/{version}/model.tar.gz"
 }
 ```
 Plus a matching KMS key policy grant on the DS-side CMK for `kms:Decrypt`.
 
-**Option B — sts:AssumeRole to a DS-side role that already has the reads.** Same mechanism `emit_baseline_inputs.py` uses today for cross-account writes (`BaselineUploaderRole`, per ml-iac#164). Symmetry win. Requires a `BaselineDownloaderRole` in DS with the S3+KMS reads on the model artefact.
+**Option B — sts:AssumeRole to a DS-side role that already has the reads.** Same mechanism `emit_baseline_inputs.py` uses today for cross-account writes (`BaselineUploaderRole`, per deploy-repo#164). Symmetry win. Requires a `BaselineDownloaderRole` in DS with the S3+KMS reads on the model artefact.
 
-**Recommendation:** Option B during the transitional period. It matches the pattern already ml-iac-managed for uploads, keeps DS-side changes to one role rather than N bucket policies (one per model), and dies naturally once MPG lives in ML_ARTIFACT and the assume-role step goes away.
+**Recommendation:** Option B during the transitional period. It matches the pattern already deploy-repo-managed for uploads, keeps DS-side changes to one role rather than N bucket policies (one per model), and dies naturally once MPG lives in ML_ARTIFACT and the assume-role step goes away.
 
 ### C.4 ECR image storage + CI/CD
 
-Image lives in **ML_ARTIFACT ECR**, same repo pattern as `ufx-monitor`:
-- Repo: `965377249924.dkr.ecr.eu-west-1.amazonaws.com/ufx-baseline`
+Image lives in **ML_ARTIFACT ECR**, same repo pattern as `model-monitor`:
+- Repo: `965377249924.dkr.ecr.eu-west-1.amazonaws.com/model-baseline`
 - Tag scheme: `<short-commit-sha>` for every push to `main`; `latest` moves.
-- CDK reads the tag from an SSM param or ECR image lookup — same helper `ufx-monitor` uses.
+- CDK reads the tag from an SSM param or ECR image lookup — same helper `model-monitor` uses.
 
-GitHub Actions workflow — mirror `build-ufx-monitor-image.yml`:
+GitHub Actions workflow — mirror `build-model-monitor-image.yml`:
 
 ```yaml
-# .github/workflows/build-ufx-baseline-image.yml
-name: Build ufx-baseline image
+# .github/workflows/build-model-baseline-image.yml
+name: Build model-baseline image
 on:
   push:
     branches: [main]
-    paths: ['src/monitor_containers/ufx_baseline/**']
+    paths: ['containers/model_baseline/**']
   workflow_dispatch:
 permissions:
   id-token: write   # OIDC for aws-actions/configure-aws-credentials
@@ -793,21 +792,21 @@ jobs:
       - uses: actions/checkout@v4
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::965377249924:role/GH-EcrPush-UfxBaseline
+          role-to-assume: arn:aws:iam::965377249924:role/GH-EcrPush-Baseline
           aws-region: eu-west-1
       - uses: aws-actions/amazon-ecr-login@v2
       - name: Build + push
-        working-directory: src/monitor_containers/ufx_baseline
+        working-directory: containers/model_baseline
         run: |
-          IMAGE_URI=965377249924.dkr.ecr.eu-west-1.amazonaws.com/ufx-baseline:${{ github.sha }}
+          IMAGE_URI=965377249924.dkr.ecr.eu-west-1.amazonaws.com/model-baseline:${{ github.sha }}
           docker build -t "$IMAGE_URI" .
           docker push "$IMAGE_URI"
           # Move :latest — CDK reads by digest in prod so this is cosmetic.
-          docker tag "$IMAGE_URI" 965377249924.dkr.ecr.eu-west-1.amazonaws.com/ufx-baseline:latest
-          docker push 965377249924.dkr.ecr.eu-west-1.amazonaws.com/ufx-baseline:latest
+          docker tag "$IMAGE_URI" 965377249924.dkr.ecr.eu-west-1.amazonaws.com/model-baseline:latest
+          docker push 965377249924.dkr.ecr.eu-west-1.amazonaws.com/model-baseline:latest
 ```
 
-Adds a scan gate (Trivy or `docker scout`) as a follow-on ticket — copy from `ufx-monitor` if it has one, otherwise track under `.claude/findings.md`.
+Adds a scan gate (Trivy or `docker scout`) as a follow-on ticket — copy from `model-monitor` if it has one, otherwise track under `.claude/findings.md`.
 
 ### C.5 SFN retry policy
 
@@ -841,16 +840,16 @@ Slight tweak vs. today: bump `IntervalSeconds` from 5→30 on the first block. S
 
 ### D.1 Phase 0 — Preflight
 
-1. Build `ufx-baseline` image locally.
+1. Build `model-baseline` image locally.
 2. Push to ML_ARTIFACT ECR under a `dev-<commit>` tag.
-3. Unit-test the container against a real `bos_sess_seq_clf` dataset snapshot. Concretely — mount a copy of the latest `bos_seq` baseline input from S3 to `/opt/ml/processing/input/data`, run `docker run --rm -e MONITOR_TYPE=bias -e PACKAGE_GROUP_NAME=bos-sess-seq-clf -e BASELINE_VERSION=99 ufx-baseline:dev-<sha>` locally, diff the resulting `analysis.json` against Clarify's most recent good run.
+3. Unit-test the container against a real `example_classifier` dataset snapshot. Concretely — mount a copy of the latest `example_model` baseline input from S3 to `/opt/ml/processing/input/data`, run `docker run --rm -e MONITOR_TYPE=bias -e PACKAGE_GROUP_NAME=example-classifier -e BASELINE_VERSION=99 model-baseline:dev-<sha>` locally, diff the resulting `analysis.json` against Clarify's most recent good run.
 4. Green: `smclarify` numeric outputs match Clarify's to 4 decimal places on the same input. SHAP top-10 features overlap ≥ 80%.
 
 Owner: 1 engineer. Estimate: 1-2 days.
 
 ### D.2 Phase 1 — Parallel run
 
-1. Deploy `UfxBaselineConstruct` **alongside** the existing Clarify path in `AnalyzerBaselineConstruct`. Both wired to the same S3 input prefix, writing to distinct output subprefixes (`.../output/v{N}/` for Clarify, `.../output-v2/v{N}/` for `ufx-baseline`).
+1. Deploy `BaselineConstruct` **alongside** the existing Clarify path in `AnalyzerBaselineConstruct`. Both wired to the same S3 input prefix, writing to distinct output subprefixes (`.../output/v{N}/` for Clarify, `.../output-v2/v{N}/` for `model-baseline`).
 2. Every baseline upload triggers both SFNs. Ignore transient throttles — Phase 1 tolerates them.
 3. Comparison script (once-per-week): pull both `analysis.json` outputs, compare metric-by-metric.
    - **Green criteria:** bias numeric values match to 4 decimal places (smclarify is deterministic — differences at this tolerance indicate a wrapper bug in our container).
@@ -861,17 +860,17 @@ Owner: 1 engineer + 30 min/week comparison chore.
 
 ### D.3 Phase 2 — Cutover
 
-1. Flip the EventBridge target: `S3TriggerRule<Bias|Explain>` now points at the UFX SFN, not the Clarify SFN.
+1. Flip the EventBridge target: `S3TriggerRule<Bias|Explain>` now points at the project SFN, not the Clarify SFN.
 2. Keep Clarify path deployed but idle for 2 weeks. Rollback plan: flip the EB target back.
-3. Monitoring: alarm on `ufx-baseline` SFN failure rate > 0 over 24h. Alarm on missing output S3 object.
+3. Monitoring: alarm on `model-baseline` SFN failure rate > 0 over 24h. Alarm on missing output S3 object.
 
 Owner: 1 engineer, plus deploy window.
 
 ### D.4 Phase 3 — Rip out
 
 1. Delete Clarify branches from `analyzer_baseline_construct.py`. Delete `_CLARIFY_TYPES`, `_CLARIFY_IMAGE_BY_REGION`, Clarify `_processing_inputs`, Clarify `_job_runtime_spec`.
-2. Delete Clarify-specific fields from ml-core's `emit_baseline_inputs.py` analysis_config generator (JMESPath features, `content_template`, `headers` list, `label_headers`).
-3. Consider (deferred): fold MQ + DQ baseline into the same `ufx-baseline` image. Rationale — MQ/DQ still use the AWS Model Monitor analyzer image, which is closed-source and shares failure modes with Clarify. But that image is more benign (no config gymnastics), so the priority is lower. Track as a separate ticket.
+2. Delete Clarify-specific fields from train-repo's `emit_baseline_inputs.py` analysis_config generator (JMESPath features, `content_template`, `headers` list, `label_headers`).
+3. Consider (deferred): fold MQ + DQ baseline into the same `model-baseline` image. Rationale — MQ/DQ still use the AWS Model Monitor analyzer image, which is closed-source and shares failure modes with Clarify. But that image is more benign (no config gymnastics), so the priority is lower. Track as a separate ticket.
 
 Owner: 1 engineer. Estimate: half-day.
 
@@ -900,16 +899,16 @@ Assume 4 models × 1 baseline per week × (bias + explain) = 32 runs/month.
 
 ### E.3 Observability
 
-- **CW Logs.** Each Processing Job creates a log stream under `/aws/sagemaker/ProcessingJobs`. `ufx-baseline` emits structured JSON logs (mirroring `ufx_monitor`'s `logging.basicConfig` pattern).
+- **CW Logs.** Each Processing Job creates a log stream under `/aws/sagemaker/ProcessingJobs`. `model-baseline` emits structured JSON logs (mirroring `model_monitor`'s `logging.basicConfig` pattern).
 - **SFN execution history.** One execution per baseline upload. Full state history in the SFN console, including the `CreateProcessingJob.sync` polled Describe payload.
-- **CW metrics namespace.** `ufx/monitoring/v2/baseline-*`. Metrics:
+- **CW metrics namespace.** `<configurable>/monitoring/v2/baseline-*` — namespace is a construct-level param. Metrics:
   - `baseline_run_success` (Count, 1 per successful run)
   - `baseline_run_failed_config` / `_dataset` / `_model` / `_compute` / `_write` (Count, 1 per failure by phase)
   - `baseline_compute_duration_seconds` (Seconds, per run)
   - `shap_nsamples_used` (Count) — for cost auditing
   - Dimensions: `PackageGroupName`, `MonitorType`, `BaselineVersion`.
-- Container emits these directly to CW at end-of-job via boto3 — same pattern `ufx_monitor` uses.
-- **Dashboard.** Add a "Baselines" tab to the existing `UfxSiloDashboard` (see task #72). Widgets: run count per week per model, failure count by phase, mean compute duration, latest baseline age. All SEARCH-expression widgets (per refactor #59) so they self-discover new packages.
+- Container emits these directly to CW at end-of-job via boto3 — same pattern `model_monitor` uses.
+- **Dashboard.** Add a "Baselines" tab to the deploy repo's silo dashboard. Widgets: run count per week per model, failure count by phase, mean compute duration, latest baseline age. All SEARCH-expression widgets so they self-discover new packages.
 
 ### E.4 On-call scenarios
 
@@ -919,7 +918,7 @@ Assume 4 models × 1 baseline per week × (bias + explain) = 32 runs/month.
 | Model load failure (`model.tar.gz` corrupt / missing) | `failure.json` `phase="model-load"`. SNS Publish subject: `Baseline failure: {pkg} explainability`. | Confirm S3 object exists + KMS grants in place. Common causes: MPG version reg step failed, DS-side role expired. |
 | S3 KMS Access Denied | `failure.json` `phase="dataset-load"` or `"output-write"`. Boto3 raises `ClientError` with `AccessDenied`. | Cross-account grants — check DS-side role trust (Option B in C.3) or bucket/KMS policy. Also verify the SageMaker execution role gets `kms:Decrypt`. |
 | SHAP OOM | Container OOMs → SageMaker marks job `Failed`. No `failure.json` written (process died pre-flush). CW logs show `MemoryError` before the kill. | Reduce `SHAP_NSAMPLES` or `SHAP_BACKGROUND_K`. Or bump instance to `ml.m5.4xlarge` (32 GB). Cost jumps to ~$0.15/run. |
-| Baseline output written but empty / bad shape | `HeadObject` step succeeds (object exists); `ufx-monitor` will fail to parse it hours later. | Add a shape-check step in the SFN — a Lambda that opens `analysis.json` and validates the pydantic schema before Succeed. Track as a follow-up hardening ticket. |
+| Baseline output written but empty / bad shape | `HeadObject` step succeeds (object exists); `model-monitor` will fail to parse it hours later. | Add a shape-check step in the SFN — a Lambda that opens `analysis.json` and validates the pydantic schema before Succeed. Track as a follow-up hardening ticket. |
 
 Auth-reality note (per Manager brief): SSO / claude-br sessions expire during long-running dev-loop iterations. Local `docker run` unit tests survive re-auth because they don't hold AWS credentials for long (only long enough to download the input dataset). SFN + Processing Job execution is entirely inside AWS, immune to local-session expiry. **No auth-survival changes needed.**
 
@@ -931,7 +930,7 @@ Auth-reality note (per Manager brief): SSO / claude-br sessions expire during lo
 
 Nonzero risk given the closed-access change. Fallbacks:
 
-- **Vendored fork.** Fork `aws/amazon-sagemaker-clarify` to `urbanfoxai/smclarify` and reference the fork's `src/smclarify` via a path dependency in `pyproject.toml`. Apache-2.0 license permits this.
+- **Vendored fork.** Fork `aws/amazon-sagemaker-clarify` to `<owner>/smclarify` and reference the fork's `src/smclarify` via a path dependency in `pyproject.toml`. Apache-2.0 license permits this.
 - **Reimplement the formulas.** Each metric is ~5-10 LOC and is arithmetic on labelled DataFrames. Formulas per [Clarify metric doc](https://docs.aws.amazon.com/sagemaker/latest/dg/clarify-measure-data-bias.html):
   - **CI** (Class Imbalance): `(n_a - n_d) / (n_a + n_d)` where n_a, n_d are counts in advantaged / disadvantaged facet.
   - **DPL** (Difference in Positive Proportion in Labels): `q_a - q_d` where q_x = P(y=1 | facet=x).
@@ -948,7 +947,7 @@ We do not vendor at Phase 1. Track as a risk with two mitigations at hand.
 
 ### F.2 SHAP on a BiGRU consuming session-level flat features
 
-Per this week's flatten fix (task #88 / squad ml-core BOS_SEQ baseline flattener), BOS_SEQ now takes **session-aggregate flat features**. Each row is one session. The BiGRU inside the model still runs internally, but from the outside it looks like `predict_proba: [n, f] -> [n, 3]`. Perfect for `KernelExplainer`.
+EXAMPLE_MODEL now takes **session-aggregate flat features**. Each row is one session. The BiGRU inside the model still runs internally, but from the outside it looks like `predict_proba: [n, f] -> [n, 3]`. Perfect for `KernelExplainer`.
 
 If the model reverts to true sequence input (T timesteps per session), we'd need a wrapper that reshapes `[n, f]` back to `[n, T, f_per_step]` inside `predict_proba`. But the current model shape makes SHAP straightforward. The wrapper in B.7 (`predict_proba` doing a `unsqueeze(1)` for the BiGRU's expected `[n, T, f]` shape) is the minimum needed.
 
@@ -968,11 +967,11 @@ Recommendation: start at nsamples=100 for the Phase 1 parallel-run (fast iterati
 
 ### F.4 Model version pinning — when does baseline recompute?
 
-Current trigger: EventBridge on S3 `Object Created` in the input prefix. That fires whenever ml-core's training pipeline emits a new baseline input. Ml-core's pipeline emits a baseline input when `if_steps` (eval gate) passes — i.e. per new registered MP version.
+Current trigger: EventBridge on S3 `Object Created` in the input prefix. That fires whenever train-repo's training pipeline emits a new baseline input. Ml-core's pipeline emits a baseline input when `if_steps` (eval gate) passes — i.e. per new registered MP version.
 
-So: **baseline recomputes on every MP registration, not on schedule.** This is the correct trigger. `MODEL_S3_URI` is passed via CDK — it currently points at the DS-account model bucket by MPG version. When the ml-core pipeline registers a new version, it also emits the baseline input, which fires the baseline SFN, which loads the *new* model.tar.gz from the same version.
+So: **baseline recomputes on every MP registration, not on schedule.** This is the correct trigger. `MODEL_S3_URI` is passed via CDK — it currently points at the DS-account model bucket by MPG version. When the train-repo pipeline registers a new version, it also emits the baseline input, which fires the baseline SFN, which loads the *new* model.tar.gz from the same version.
 
-Open question: what if the endpoint deployment lags MP registration? Answer: fine — the baseline is a property of the MP, not the endpoint. Downstream `ufx-monitor` compares captured inference against the baseline for its own MP version.
+Open question: what if the endpoint deployment lags MP registration? Answer: fine — the baseline is a property of the MP, not the endpoint. Downstream `model-monitor` compares captured inference against the baseline for its own MP version.
 
 ### F.5 Provenance sidecar
 
@@ -982,12 +981,12 @@ Yes — emit `_provenance.json` alongside `analysis.json`. Shape:
 {
   "schema_version": 1,
   "monitor_type": "explainability",
-  "package_group_name": "bos-sess-seq-clf",
+  "package_group_name": "example-classifier",
   "baseline_version": 3,
   "model_s3_uri": "s3://.../model.tar.gz",
   "model_etag": "abc...",
   "dataset_row_count": 12045,
-  "container_image_uri": "965377249924.dkr.ecr.eu-west-1.amazonaws.com/ufx-baseline:<sha>",
+  "container_image_uri": "965377249924.dkr.ecr.eu-west-1.amazonaws.com/model-baseline:<sha>",
   "container_image_digest": "sha256:...",
   "container_git_commit": "abc1234",
   "smclarify_version": "0.5",
@@ -999,7 +998,7 @@ Yes — emit `_provenance.json` alongside `analysis.json`. Shape:
 }
 ```
 
-Matches ml-core's baseline emitter provenance style (see `emit_baseline_inputs.py` header). Gives us the "which container image, which model file, which library version" audit trail Clarify never exposed.
+Matches train-repo's baseline emitter provenance style (see `emit_baseline_inputs.py` header). Gives us the "which container image, which model file, which library version" audit trail Clarify never exposed.
 
 ---
 
@@ -1007,15 +1006,15 @@ Matches ml-core's baseline emitter provenance style (see `emit_baseline_inputs.p
 
 | Deliverable | Path | Est LOC |
 |---|---|---|
-| Container Python | `src/monitor_containers/ufx_baseline/ufx_baseline/**` | ~350 |
-| Container tests | `src/monitor_containers/ufx_baseline/tests/**` | ~250 |
-| Dockerfile + entrypoint | `src/monitor_containers/ufx_baseline/{Dockerfile,entrypoint.sh}` | ~40 |
-| pyproject.toml + uv.lock | `src/monitor_containers/ufx_baseline/pyproject.toml` | ~40 |
-| README | `src/monitor_containers/ufx_baseline/ufx_baseline/README.md` | ~150 |
-| CDK — new construct | `src/stacks/ufx_ml_monitoring_stack/constructs/ufx_baseline_construct.py` | ~180 |
-| CDK — dispatch tweak | `src/stacks/ufx_ml_monitoring_stack/constructs/analyzer_baseline_construct.py` | ~30 diff |
+| Container Python | `containers/model_baseline/model_baseline/**` | ~350 |
+| Container tests | `containers/model_baseline/tests/**` | ~250 |
+| Dockerfile + entrypoint | `containers/model_baseline/{Dockerfile,entrypoint.sh}` | ~40 |
+| pyproject.toml + uv.lock | `containers/model_baseline/pyproject.toml` | ~40 |
+| README | `containers/model_baseline/model_baseline/README.md` | ~150 |
+| CDK — new construct | `cdk/src/model_monitor_cdk/constructs/model_baseline_construct.py` | ~180 |
+| CDK — dispatch tweak | `cdk/src/model_monitor_cdk/constructs/analyzer_baseline_construct.py` | ~30 diff |
 | CDK — config dataclass | `src/common/inference_deployments/monitoring_configs.py` | ~40 |
-| CI workflow | `.github/workflows/build-ufx-baseline-image.yml` | ~50 |
+| CI workflow | `.github/workflows/build-model-baseline-image.yml` | ~50 |
 | DS-side role (transitional) | Bespoke ticket in DS account | ~60 (Terraform or manual) |
 | **Total** | | **~1,190 LOC** |
 
@@ -1038,8 +1037,8 @@ Squad-day cost estimate from assessment §6 (~1 day) is optimistic; realistic es
 - SHAP — [PyPI (shap 0.52.0)](https://pypi.org/project/shap/)
 - Evidently — [evidentlyai/evidently](https://github.com/evidentlyai/evidently)
 - WhyLabs — [whylabs/whylogs](https://github.com/whylabs/whylogs)
-- UFX internal — [SM_MODEL_MONITOR_ASSESSMENT.md](SM_MODEL_MONITOR_ASSESSMENT.md)
-- UFX internal — [ufx-monitor container README](../../monitoring-custom-container-explore/src/monitor_containers/ufx_monitor/README.md)
-- UFX internal — [`analyzer_baseline_construct.py`](../../monitoring-custom-container-explore/src/stacks/ufx_ml_monitoring_stack/constructs/analyzer_baseline_construct.py)
-- UFX internal — [ml-core `emit_baseline_inputs.py`](../../../../ml-core/projects/bos_sess_seq_clf/src/emit_baseline_inputs.py)
-- UFX internal — [ml-core BOS_SEQ inference handler](../../../../ml-core/projects/bos_sess_seq_clf/src/inference.py)
+- the project internal — [SM_MODEL_MONITOR_ASSESSMENT.md](SM_MODEL_MONITOR_ASSESSMENT.md)
+- the project internal — [model-monitor container README](../../monitoring-custom-container-explore/containers/model_monitor/README.md)
+- the project internal — [`analyzer_baseline_construct.py`](../../monitoring-custom-container-explore/cdk/src/model_monitor_cdk/constructs/analyzer_baseline_construct.py)
+- the project internal — [train-repo `emit_baseline_inputs.py`](../../../../train-repo/projects/example_classifier/src/emit_baseline_inputs.py)
+- the project internal — [train-repo EXAMPLE_MODEL inference handler](../../../../train-repo/projects/example_classifier/src/inference.py)
