@@ -19,3 +19,4 @@ Canonical design decisions for `model-monitor-custom`. ADR-style.
 | [004](004-schema-evolution.md) | Schema evolution — SemVer, additive-only, dual-emit on breaking | Accepted |
 | [006](006-observability-contract.md) | Observability contract — CW namespace, DDB row shape, logging | Accepted |
 | [007](007-failure-taxonomy.md) | Failure taxonomy — 6-way Outcome + orthogonal Severity, `failure.json` sidecar | Accepted |
+| [008](008-cross-account-iam-style.md) | Cross-account IAM style — 1 role vs N roles | Accepted |
