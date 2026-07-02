@@ -1,34 +1,36 @@
 # Docs
 
-Start here.
+Start at the [root README](../README.md) for the overview + diagrams. Deep detail lives here.
 
 ## Core
 
 | Doc | When to read |
 |---|---|
 | [`STANDARDS.md`](STANDARDS.md) | Before writing a line of code. Non-negotiables (TDD, ruff, ty). |
-| [`ARCHITECTURE.md`](ARCHITECTURE.md) | The mental model, system boundaries, container I/O contract, S3 layout, AWS account topology. |
-| [`IAC_DESIGN.md`](IAC_DESIGN.md) | CDK stack layout, deploy tool, naming, tags, Phase 2 build order. Decision digest. |
-| [`ROADMAP.md`](ROADMAP.md) | Phase status + current-phase task list. |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Mental model, system boundaries, container I/O contract, S3 layout, account topology. |
+| [`IAC_DESIGN.md`](IAC_DESIGN.md) | CDK stack layout, deploy tool, naming, tags, Phase 2 build order. |
+| [`ROADMAP.md`](ROADMAP.md) | Phase status + current task list. |
 
-## Background
+## Research
 
-| Doc | Why it exists |
-|---|---|
-| [`SM_MODEL_MONITOR_ASSESSMENT.md`](SM_MODEL_MONITOR_ASSESSMENT.md) | Evidence-backed case for why this project exists (moving off SageMaker Model Monitor + Clarify). |
-| [`BASELINE_CONTAINER_DESIGN.md`](BASELINE_CONTAINER_DESIGN.md) | Original deep design spec for the baseline container. Some parts superseded by ARCHITECTURE.md — kept for provenance. |
-
-## Grounded research
+Grounded background — the receipts behind the decisions above. Read the digests in Core first.
 
 | Doc | Findings |
 |---|---|
-| [`SFN_FAN_OUT_RESEARCH.md`](SFN_FAN_OUT_RESEARCH.md) | Real AWS compute + workflow choices for the fan-out shape (Standard SFN, Parallel state, ECS Fargate via `ecs:runTask.sync`). |
-| [`SFN_STATE_STRUCTURE_RESEARCH.md`](SFN_STATE_STRUCTURE_RESEARCH.md) | 5 public reference architectures examined — Prepare/Publish Lambdas rejected, containers-own-I/O pattern chosen. |
+| [`research/SM_MODEL_MONITOR_ASSESSMENT.md`](research/SM_MODEL_MONITOR_ASSESSMENT.md) | Evidence-backed case for moving off SageMaker Model Monitor + Clarify. |
+| [`research/IAC_DESIGN_RESEARCH.md`](research/IAC_DESIGN_RESEARCH.md) | Multi-account CDK reference architectures. Stacks, deploy tools, naming. Digest → `IAC_DESIGN.md`. |
+| [`research/SFN_FAN_OUT_RESEARCH.md`](research/SFN_FAN_OUT_RESEARCH.md) | Compute + workflow choices. Verdict: ECS Fargate + SFN Standard + Parallel + `ecs:runTask.sync`. |
+| [`research/SFN_STATE_STRUCTURE_RESEARCH.md`](research/SFN_STATE_STRUCTURE_RESEARCH.md) | 5 public reference architectures — Prepare/Publish Lambdas rejected, containers-own-I/O chosen. |
+| [`research/BASELINE_CONTAINER_DESIGN.md`](research/BASELINE_CONTAINER_DESIGN.md) | Deep design spec for the baseline container. Parts superseded by `ARCHITECTURE.md`; kept for provenance. |
 
 ## Diagrams
 
-Rendered PNGs live in [`diagrams/`](diagrams/). Sources: D2 for account topology, Mermaid for the two runtime flows.
+Sources + rendered PNGs in [`diagrams/`](diagrams/). D2 for the account grid; Mermaid for both runtime flows.
 
-- `accounts.png` — where each account sits + what lives in it
-- `snapshot-analysis.png` — one-shot baseline compute
-- `live-analysis.png` — recurring drift monitoring
+| Diagram | What it shows |
+|---|---|
+| `accounts.png` | AWS account topology (`ml-artifact` / `ml-operations` / `ml-inference-*`). |
+| `snapshot-analysis.png` | One-shot baseline compute — S3 → SFN → Fargate → S3. |
+| `live-analysis.png` | Recurring drift monitoring — cron → SFN → Fargate → CW + DDB → Pipes fan-out. |
+
+Every runtime-behaviour PR updates the affected diagram + its source (see `STANDARDS.md` → "Diagrams stay in sync"). Render commands in `STANDARDS.md`.

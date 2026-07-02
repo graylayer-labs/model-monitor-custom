@@ -84,7 +84,7 @@ Immutable per `<N>`. Never overwrite a version — new state = new directory.
 
 Every analyser container — snapshot or live, all five kinds — implements the **same input/output protocol**. The contract lives in the `shared/` package and is enforced by Pydantic at container startup.
 
-Grounded in the SFN research: teams overwhelmingly launch containers with a small structured env-var payload and let the container fetch anything larger itself (research doc: `SFN_STATE_STRUCTURE_RESEARCH.md`).
+Grounded in the SFN research: teams overwhelmingly launch containers with a small structured env-var payload and let the container fetch anything larger itself (research doc: `research/SFN_STATE_STRUCTURE_RESEARCH.md`).
 
 ### Inputs — what SFN passes as `ContainerOverrides.Environment`
 
@@ -124,7 +124,7 @@ This satisfies the "one branch dying does not kill siblings" requirement (SFN re
 
 ### Why S3 for config, not SSM
 
-Real-world reference architectures ([SFN_STATE_STRUCTURE_RESEARCH.md](SFN_STATE_STRUCTURE_RESEARCH.md)) overwhelmingly use S3 for structured config that a container needs to fetch. Reasons:
+Real-world reference architectures ([research/SFN_STATE_STRUCTURE_RESEARCH.md](research/SFN_STATE_STRUCTURE_RESEARCH.md)) overwhelmingly use S3 for structured config that a container needs to fetch. Reasons:
 
 - One IAM story — the container already needs S3 for input/output.
 - Versioned — S3 versioning gives free config-history.
@@ -335,5 +335,5 @@ Every arrow crossing an account boundary is an explicit IAM grant + optional KMS
 
 - **Not a SaaS.** No hosted UI, no vendor backend. Everything runs in your accounts.
 - **Not a replacement for `evidently`, `whylogs`, `Arize`, `Fiddler`, etc.** These are alternatives. This project is the "own it end-to-end on SageMaker Processing Jobs" option.
-- **Not tied to any specific model type.** Users bring a `ModelAdapter` (see `BASELINE_CONTAINER_DESIGN.md`).
+- **Not tied to any specific model type.** Users bring a `ModelAdapter` (see `research/BASELINE_CONTAINER_DESIGN.md`).
 - **Not tied to any specific dashboard tool.** CW is one option; users can point Pipes at Datadog / Grafana / anywhere.

@@ -1,6 +1,6 @@
 # IaC Design — decision digest
 
-Short version of [`IAC_DESIGN_RESEARCH.md`](IAC_DESIGN_RESEARCH.md). Every contributor reads this before touching `cdk/`. The research doc holds the receipts.
+Short version of [`research/IAC_DESIGN_RESEARCH.md`](research/IAC_DESIGN_RESEARCH.md). Every contributor reads this before touching `cdk/`. The research doc holds the receipts.
 
 ## Stack layout
 
