@@ -154,7 +154,7 @@ Training pipeline                              Monitoring baselines bucket      
         │                                              │                                 │
         │                                              ▼                                 │
         │                                    Baseline SFN + Processing Job               │
-        │                                    (ufx-baseline container)                    │
+        │                                    (baseline container)                    │
         │                                              │ reads model artefact            │
         │                                              │ (cross-account)                 │
         │                                              ▼                                 │
@@ -162,7 +162,7 @@ Training pipeline                              Monitoring baselines bucket      
         │                                                                                │
         │                                                                                ▼
         │                                    baselines (cross-account S3)      Monitor Processing Job
-        │                                    ────────────────────────────────► (ufx-monitor container)
+        │                                    ────────────────────────────────► (monitor container)
         │                                                                                │
         │                                                                                ▼
         │                                                                        CW metrics + DDB rows

@@ -28,7 +28,7 @@ containers/
 cdk/          — CDK library the deploy repo consumes (SFN + EventBridge + Processing Job orchestration)
 docs/
   SM_MODEL_MONITOR_ASSESSMENT.md    — honest assessment: why move off Clarify (evidence-backed)
-  UFX_BASELINE_CONTAINER_DESIGN.md  — design spec for the new baseline container
+  BASELINE_CONTAINER_DESIGN.md  — design spec for the new baseline container
 scripts/      — local-run + parity-check helpers
 tests/        — unit + integration tests, fixture datasets
 ```
@@ -37,7 +37,7 @@ tests/        — unit + integration tests, fixture datasets
 
 - **Phase 0 (now):** repo + docs + scaffolding.
 - **Phase 1:** import the `monitor/` container from the existing sprint repo — source, tests, ECR pipeline.
-- **Phase 2:** build the `baseline/` container per `UFX_BASELINE_CONTAINER_DESIGN.md`. Prove numerical parity with Clarify on a pilot dataset.
+- **Phase 2:** build the `baseline/` container per `BASELINE_CONTAINER_DESIGN.md`. Prove numerical parity with Clarify on a pilot dataset.
 - **Phase 3:** extract CDK constructs from the deploy repo into `cdk/` as a consumable library.
 - **Phase 4:** deploy repo swaps its inline stacks for imports from this repo.
 - **Phase 5:** rip Clarify Processing Job usage out of the deploy repo.
