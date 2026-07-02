@@ -9,15 +9,15 @@ A drop-in replacement for SageMaker Model Monitor + Clarify. Own the container. 
 ## Phase status
 
 - [x] **Phase 0 — scaffolding.** Repo layout + assessment doc + design doc + standards + architecture + roadmap.
-- [ ] **Phase 1 — interfaces (RED tests only).** Write the ABCs, config schemas, and failing tests. No implementation yet.
+- [x] **Phase 1 — interfaces.** ABCs, config schemas, Protocols, fixtures, CI skeleton.
 - [ ] **Phase 2 — baseline bias.** Implement `smclarify` wrapper. Numerical parity with Clarify on the UCI Adult fixture.
 - [ ] **Phase 3 — baseline explainability.** SHAP wrapper. Model adapters for sklearn + XGBoost + PyTorch. Prove on Adult + a synthetic multiclass fixture.
-- [ ] **Phase 4 — monitor container.** Extract from the sprint repo. De-brand. Publish.
+- [ ] **Phase 4 — monitor container (5 analyzers).** MQ, DQ, Bias, Explainability, Shadow. Import + de-brand from the sprint repo. Publish.
 - [ ] **Phase 5 — CDK library.** Extract constructs from the sprint repo. Multi-account posture in code. Publish.
 - [ ] **Phase 6 — end-to-end example.** Public model + public dataset. Screenshot in README.
 - [ ] **Phase 7 — internal consumption.** Sprint repo imports `cdk/`; deprecates inline stacks.
 
-## Current phase: **Phase 1 — Interfaces**
+## Current phase: **Phase 2 — Baseline bias**
 
 ### Goals
 

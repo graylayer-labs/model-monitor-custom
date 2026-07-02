@@ -1,5 +1,37 @@
 # Architecture
 
+## Mental model — read this first
+
+The system has **two runtime paths** on top of a shared **baselines bucket**.
+
+### 1. Baseline compute (one-shot, per model version)
+
+- **Trigger:** upstream training pipeline writes a training snapshot + analyzer config to the baselines bucket in `ml-artifact` (S3).
+- **Job:** the [`baseline`](../containers/baseline/) container runs each enabled analyzer's baseline computation over the snapshot.
+- **Output:** Clarify-compatible files back to the same bucket — `constraints.json` (MQ thresholds), `statistics.json` (DQ per-feature stats), `analysis.json` (pre-training bias metrics + SHAP feature importance). These files are the input for step 2.
+
+### 2. Live monitoring (recurring, per endpoint)
+
+- **Trigger:** cron schedule per inference endpoint (default hourly).
+- **Job:** the [`monitor`](../containers/monitor/) container reads the current window's inference data capture (S3, local account), optional ground truth, and the **baseline output files** (cross-account read from `ml-artifact`).
+- **Output:** CloudWatch metrics + DynamoDB outcome rows per analyzer per run. Consumers fan out from DDB.
+
+### The five analyzers
+
+| Analyzer | Needs baseline file | Live input |
+|---|---|---|
+| **Model Quality (MQ)** | `constraints.json` (thresholds) | data capture + ground truth |
+| **Data Quality (DQ)** | `statistics.json` (per-feature stats) | data capture |
+| **Bias** | `analysis.json` (pre-training bias metrics) | data capture (recompute + compare) |
+| **Explainability** | `analysis.json` (SHAP feature importances) | data capture (recompute + compare) |
+| **Shadow** | *none* — no baseline compute | shadow-variant capture **+** prod-variant capture (live-vs-live) |
+
+**Shadow is the special case.** It is not a baseline-vs-live comparison; it's a live-vs-live comparison of two model variants deployed to the same endpoint. No baseline job needed — only the monitor job, and only when a shadow variant is configured on the endpoint.
+
+So the runtime has two shapes:
+- **Baseline-dependent analyzers** (MQ, DQ, Bias, Explainability) — need step 1 to produce their file, then step 2 consumes it.
+- **Baseline-independent analyzer** (Shadow) — only step 2, and only when the endpoint has a shadow variant.
+
 ## Diagrams
 
 ### Account topology
@@ -111,12 +143,13 @@ For a first deploy, all seven components can live in one account (Data Science o
 - Baseline artefacts from `ml-artifact` (S3, cross-account).
 - Optional ground-truth stream.
 
-**Analyzers (mirroring what already exists in the sprint repo):**
-- Model Quality — accuracy, F1, per-class metrics, confusion matrix.
-- Data Quality — distribution drift on features, cardinality, null counts.
-- Bias — drift of `analysis.json` bias metrics vs baseline.
-- Explainability — surrogate feature importance vs baseline SHAP.
-- Shadow — production variant vs shadow variant comparison.
+**Analyzers** — see [Mental model → The five analyzers](#the-five-analyzers) for the full matrix of what each one needs. In brief:
+
+- **Model Quality** — accuracy, F1, per-class metrics, confusion matrix. Needs `constraints.json` + ground truth.
+- **Data Quality** — distribution drift on features, cardinality, null counts. Needs `statistics.json`.
+- **Bias** — drift of pre-training bias metrics vs baseline. Needs `analysis.json`.
+- **Explainability** — feature importance drift vs baseline SHAP values. Needs `analysis.json`.
+- **Shadow** — live-vs-live comparison of production vs shadow variant on the same endpoint. **No baseline file** — only runs when a shadow variant is configured.
 
 **Outputs:**
 - CloudWatch metrics under namespace `<configurable>/monitoring/v2`.
