@@ -42,6 +42,8 @@ jobs:
             ':(exclude)**/*.parquet' \
             ':(exclude)**/*.lock' \
             ':(exclude)**/htmlcov/**' \
+            ':(exclude)containers/base/src/mmc_base/ban_list.py' \
+            ':(exclude)containers/base/tests/test_ban_list.py' \
             || true)
 
           if [ -n "$matches" ]; then

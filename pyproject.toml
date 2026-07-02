@@ -12,14 +12,16 @@ authors = [{ name = "Eoin McArdle" }]
 dependencies = [
     "model-baseline",
     "model-monitor-cdk",
+    "mmc-base",
 ]
 
 [tool.uv.workspace]
-members = ["containers/baseline", "cdk"]
+members = ["containers/baseline", "containers/base", "cdk"]
 
 [tool.uv.sources]
 model-baseline = { workspace = true }
 model-monitor-cdk = { workspace = true }
+mmc-base = { workspace = true }
 
 [dependency-groups]
 dev = [
