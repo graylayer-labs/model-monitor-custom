@@ -8,6 +8,7 @@ Start here.
 |---|---|
 | [`STANDARDS.md`](STANDARDS.md) | Before writing a line of code. Non-negotiables (TDD, ruff, ty). |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | The mental model, system boundaries, container I/O contract, S3 layout, AWS account topology. |
+| [`IAC_DESIGN.md`](IAC_DESIGN.md) | CDK stack layout, deploy tool, naming, tags, Phase 2 build order. Decision digest. |
 | [`ROADMAP.md`](ROADMAP.md) | Phase status + current-phase task list. |
 
 ## Background

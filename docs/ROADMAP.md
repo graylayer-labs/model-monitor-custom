@@ -10,22 +10,38 @@ A drop-in replacement for SageMaker Model Monitor + Clarify. Own the container. 
 
 - [x] **Phase 0 — scaffolding.** Repo layout + assessment doc + design doc + standards + architecture + roadmap.
 - [x] **Phase 1 — interfaces.** ABCs, config schemas, Protocols, fixtures, CI skeleton.
-- [ ] **Phase 2 — baseline bias.** Implement `smclarify` wrapper. Numerical parity with Clarify on the UCI Adult fixture.
-- [ ] **Phase 3 — baseline explainability.** SHAP wrapper. Model adapters for sklearn + XGBoost + PyTorch. Prove on Adult + a synthetic multiclass fixture.
-- [ ] **Phase 4 — monitor container (5 analyzers).** MQ, DQ, Bias, Explainability, Shadow. Import + de-brand from the sprint repo. Publish.
-- [ ] **Phase 5 — CDK library.** Extract constructs from the sprint repo. Multi-account posture in code. Publish.
+- [ ] **Phase 2 — infra skeleton + first container.** CDK stacks 1-3 (`ArtifactStack`, `SharedIamStack`, `InferenceMonitorStack`) with busybox placeholder image. Prove SFN → Fargate → S3/DDB wiring end-to-end. Then first `containers/baseline/` skeleton implementing the env-var contract. Redeploy stack; verify real image picks up same wiring.
+- [ ] **Phase 3 — baseline bias analyser.** `smclarify` wrapper. Numerical parity with Clarify on UCI Adult. `OperationsBaselineStack` mirrors InferenceMonitorStack for the snapshot flow.
+- [ ] **Phase 4 — baseline explainability.** SHAP wrapper. Model adapters for sklearn + XGBoost + PyTorch. Prove on Adult + synthetic multiclass fixture.
+- [ ] **Phase 5 — monitor container (5 analyzers).** MQ, DQ, Bias, Explainability, Shadow.
 - [ ] **Phase 6 — end-to-end example.** Public model + public dataset. Screenshot in README.
-- [ ] **Phase 7 — internal consumption.** Sprint repo imports `cdk/`; deprecates inline stacks.
+- [ ] **Phase 7 — CDK Pipelines / GitHub Actions matrix.** Only when team-size 5+ or first prod deploy.
 
-## Current phase: **Phase 2 — Baseline bias**
+## Current phase: **Phase 2 — Infra skeleton + first container**
+
+See [`IAC_DESIGN.md`](IAC_DESIGN.md) for the stack layout, naming, tags, and build order this phase implements.
 
 ### Goals
 
-1. Define the shape of every public interface without implementing them.
-2. Every interface has failing tests describing its contract.
-3. Nothing merged unless the RED test is in place first (TDD, per `STANDARDS.md`).
+1. Stand up `ArtifactStack`, `SharedIamStack`, `InferenceMonitorStack` with a busybox placeholder image.
+2. Prove SFN Standard → ECS Fargate Parallel → S3/DDB wiring end-to-end before writing analyser code.
+3. Build first `containers/baseline/` skeleton implementing the env-var contract from `ARCHITECTURE.md`. Push to ECR. Redeploy. Verify same wiring picks up the real image.
+4. TDD throughout — RED test before production code (per `STANDARDS.md`).
 
 ### Task list
+
+Build order (see `IAC_DESIGN.md` Phase 2 section):
+
+- [ ] **2.1 — `ArtifactStack`** in `cdk/src/model_monitor_cdk/stacks/artifact_stack.py`. ECR repos `mmc/baseline` + `mmc/monitor`, baselines S3 bucket, KMS key. Account IDs as inputs, no `self.account`. Failing tests for stack synth + resource count.
+- [ ] **2.2 — `SharedIamStack`** in `cdk/src/model_monitor_cdk/stacks/shared_iam_stack.py`. Cross-account role for `ml-operations` baseline write; per-`ml-inference-*` role for baseline read. Consumes `ArtifactStack` outputs. Failing tests for principal ARNs + scoped policies.
+- [ ] **2.3 — `InferenceMonitorStack`** in `cdk/src/model_monitor_cdk/stacks/inference_monitor_stack.py`. EventBridge Scheduler cron → SFN Standard → ECS Fargate Parallel (5 branches) → CW + DDB. DDB Streams → EventBridge Pipes (alert + archive fan-out). Per-branch Retry/Catch. **Uses busybox image URI as input** — real ECR image later. Failing tests for state-machine shape + per-branch Catch presence.
+- [ ] **2.4 — Placeholder image push.** `scripts/push-placeholder.sh` — `docker pull busybox:latest`, tag as `<acct>.dkr.ecr.eu-west-1.amazonaws.com/mmc/baseline:placeholder`, push. Redeploy `InferenceMonitorStack` pointed at this tag. Manual SFN start proves wiring.
+- [ ] **2.5 — `containers/baseline/` skeleton.** Dockerfile, entrypoint reading env-var contract from `ARCHITECTURE.md` (`PROJECT_NAME`, `RUN_ID`, `ANALYSER_TYPE`, `INPUT_URIS_JSON`, `OUTPUT_URI`, `CONFIG_URI`). Writes stub `result.json` + `_provenance.json` to `OUTPUT_URI`. Real analyser logic Phase 3. Failing tests for env-var parsing + output shape.
+- [ ] **2.6 — Push real baseline image + redeploy.** Verify same SFN wiring picks up the new image. End-to-end run writes to S3 + DDB.
+
+### Prior phase (kept for reference — completed)
+
+Phase 1 tasks (interface definitions, all RED tests in place):
 
 - [x] **1.1 — `ModelAdapter` ABC.** `containers/baseline/src/model_baseline/adapters/base.py`. Abstract methods: `load(model_uri: str) -> None`, `predict_proba(features: pd.DataFrame) -> np.ndarray`, `feature_headers() -> list[str]`, `class_labels() -> list[str]`. Failing test that asserts subclass must implement all four.
 - [x] **1.2 — `BaselineConfig` schema.** Pydantic model covering dataset URI, config URI, model URI, monitor type, output URI, thresholds. `extra="forbid"`. Failing tests for shape + required fields.
@@ -41,28 +57,20 @@ A drop-in replacement for SageMaker Model Monitor + Clarify. Own the container. 
   - Each with a README explaining generation.
 - [x] **1.10 — CI skeleton.** `.github/workflows/lint-and-test.yml` — runs `uv run ruff check`, `uv run ty check`, `uv run pytest`. All three must pass. Fails until Phase 2 implementations pass the RED tests.
 
-### Exit criteria for Phase 1
+### Exit criteria for Phase 2
 
-- All 10 tasks done.
-- `uv run pytest` shows N failing tests (all expected — they're the RED that Phase 2 will turn GREEN).
-- No production code in `containers/baseline/src/`. Only interfaces + docstrings + `raise NotImplementedError`.
-- Every public symbol has a docstring.
-- CI configured but expected to fail on tests (that's the point — we haven't implemented yet).
+- Three stacks deploy clean into a single account (prototype collapse OK — inputs still take account IDs, not `self.account`).
+- Manual SFN start with busybox image completes all 5 Parallel branches without cross-branch failure.
+- Baseline skeleton image pushed to real ECR, redeployed, one end-to-end run writes stub `result.json` + `_provenance.json` to S3 and one row per branch to DDB.
+- `uv run pytest` green on new construct + container tests.
+- No hardcoded account IDs anywhere in `cdk/`.
 
-### Non-goals in Phase 1
+### Non-goals in Phase 2
 
-- Container Dockerfile — Phase 2.
-- CDK construct implementation — Phase 5.
-- Any monitor-container work — Phase 4.
-- Docs polish beyond what already exists.
-
-## Phase 2 preview
-
-Turn Phase 1's RED tests GREEN, starting with bias:
-- `smclarify` wrapper (`compute_bias(df, spec) -> AnalysisReport`).
-- Numerical parity test: emit `analysis.json` for UCI Adult, compare metrics to values in the Clarify docs.
-- Container Dockerfile + entrypoint that reads env vars, resolves config, runs the analyzer, writes S3.
-- Local reproduce script (`scripts/run-local.sh`).
+- Real bias / SHAP / MQ / DQ logic — Phase 3+.
+- Monitor container — Phase 5.
+- CDK Pipelines / GH Actions matrix — Phase 7.
+- Multi-account deploy (single-account collapse acceptable; code shape identical).
 
 ## Governance
 
