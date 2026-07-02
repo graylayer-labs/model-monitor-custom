@@ -8,7 +8,7 @@ Start at the [root README](../README.md) for the overview + diagrams. Deep detai
 |---|---|
 | [`STANDARDS.md`](STANDARDS.md) | Before writing a line of code. Non-negotiables (TDD, ruff, ty). |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Mental model, system boundaries, container I/O contract, S3 layout, account topology. |
-| [`IAC_DESIGN.md`](IAC_DESIGN.md) | CDK stack layout, deploy tool, naming, tags, Phase 2 build order. |
+| [`design/`](design/) | Numbered design decisions (ADRs) — IaC layout, container base, anti-SageMaker guardrails. |
 | [`ROADMAP.md`](ROADMAP.md) | Phase status + current task list. |
 
 ## Research

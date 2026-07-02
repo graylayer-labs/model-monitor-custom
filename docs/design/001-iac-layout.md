@@ -1,6 +1,15 @@
-# IaC Design — decision digest
+# 001 — IaC layout
 
-Short version of [`research/IAC_DESIGN_RESEARCH.md`](research/IAC_DESIGN_RESEARCH.md). Every contributor reads this before touching `cdk/`. The research doc holds the receipts.
+**Status:** Accepted.
+**Related research:** [`../research/IAC_DESIGN_RESEARCH.md`](../research/IAC_DESIGN_RESEARCH.md).
+
+## Context
+
+Multi-account CDK Python app. Needs to be single-account-collapsible for prototype but multi-account-ready. Must not couple to any deploy tool that requires team-size 5+ to justify.
+
+## Decision
+
+Four stacks, local `cdk deploy --profile` for prototype, mono-repo layout. See below.
 
 ## Stack layout
 

@@ -19,7 +19,7 @@ A drop-in replacement for SageMaker Model Monitor + Clarify. Own the container. 
 
 ## Current phase: **Phase 2 — Infra skeleton + first container**
 
-See [`IAC_DESIGN.md`](IAC_DESIGN.md) for the stack layout, naming, tags, and build order this phase implements.
+See [`design/001-iac-layout.md`](design/001-iac-layout.md) for the stack layout, naming, tags, and build order this phase implements. See [`design/002-container-base.md`](design/002-container-base.md) for the container base + analyser pattern, and [`design/003-anti-sagemaker-guardrails.md`](design/003-anti-sagemaker-guardrails.md) for the CI + runtime guardrails.
 
 ### Goals
 
@@ -30,14 +30,16 @@ See [`IAC_DESIGN.md`](IAC_DESIGN.md) for the stack layout, naming, tags, and bui
 
 ### Task list
 
-Build order (see `IAC_DESIGN.md` Phase 2 section):
+Build order (see `design/001-iac-layout.md` Phase 2 section):
 
 - [ ] **2.1 — `ArtifactStack`** in `cdk/src/model_monitor_cdk/stacks/artifact_stack.py`. ECR repos `mmc/baseline` + `mmc/monitor`, baselines S3 bucket, KMS key. Account IDs as inputs, no `self.account`. Failing tests for stack synth + resource count.
 - [ ] **2.2 — `SharedIamStack`** in `cdk/src/model_monitor_cdk/stacks/shared_iam_stack.py`. Cross-account role for `ml-operations` baseline write; per-`ml-inference-*` role for baseline read. Consumes `ArtifactStack` outputs. Failing tests for principal ARNs + scoped policies.
 - [ ] **2.3 — `InferenceMonitorStack`** in `cdk/src/model_monitor_cdk/stacks/inference_monitor_stack.py`. EventBridge Scheduler cron → SFN Standard → ECS Fargate Parallel (5 branches) → CW + DDB. DDB Streams → EventBridge Pipes (alert + archive fan-out). Per-branch Retry/Catch. **Uses busybox image URI as input** — real ECR image later. Failing tests for state-machine shape + per-branch Catch presence.
 - [ ] **2.4 — Placeholder image push.** `scripts/push-placeholder.sh` — `docker pull busybox:latest`, tag as `<acct>.dkr.ecr.eu-west-1.amazonaws.com/mmc/baseline:placeholder`, push. Redeploy `InferenceMonitorStack` pointed at this tag. Manual SFN start proves wiring.
-- [ ] **2.5 — `containers/baseline/` skeleton.** Dockerfile, entrypoint reading env-var contract from `ARCHITECTURE.md` (`PROJECT_NAME`, `RUN_ID`, `ANALYSER_TYPE`, `INPUT_URIS_JSON`, `OUTPUT_URI`, `CONFIG_URI`). Writes stub `result.json` + `_provenance.json` to `OUTPUT_URI`. Real analyser logic Phase 3. Failing tests for env-var parsing + output shape.
-- [ ] **2.6 — Push real baseline image + redeploy.** Verify same SFN wiring picks up the new image. End-to-end run writes to S3 + DDB.
+- [ ] **2.5a — `containers/base/` (mmc/analyser-base).** Per `design/002-container-base.md`. Entrypoint, contract Pydantic models, S3/DDB/CW clients, provenance, failure sidecar, Analyser Protocol, SageMaker ban-list guard (per `design/003`). Contract test harness (reusable fixtures). RED tests first.
+- [ ] **2.5b — `containers/bias/` skeleton with NoopAnalyser.** `FROM mmc/analyser-base:sha-<pinned>`. Implements `Analyser` Protocol returning a canned `AnalyserOutput`. Proves the base + analyser pattern end-to-end. Real bias math is Phase 3.
+- [ ] **2.6 — Push real images + redeploy.** Push base + bias images to ECR. Redeploy `InferenceMonitorStack`. Verify same SFN wiring picks up the new images. End-to-end run writes `result.json` + `_provenance.json` to S3 + one DDB row per branch.
+- [ ] **2.7 — Guardrails live in CI.** `.github/workflows/anti-sagemaker.yml` per `design/003` — grep-guard fails on `SM_MODEL_DIR|SM_CHANNEL|/opt/ml/|content_template|CreateProcessingJob|MonitoringExecution`. Runs on every PR.
 
 ### Prior phase (kept for reference — completed)
 

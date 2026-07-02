@@ -16,7 +16,7 @@ Three subsystems coupled only by published JSON schemas.
 ```
 
 Full mental model + I/O contract: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
-IaC decisions (stacks, deploy, naming): [`docs/IAC_DESIGN.md`](docs/IAC_DESIGN.md).
+Design decisions (IaC layout, container base, anti-SageMaker guardrails): [`docs/design/`](docs/design/).
 Non-negotiables (TDD, ruff, ty): [`docs/STANDARDS.md`](docs/STANDARDS.md).
 
 ### Account topology
