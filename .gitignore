@@ -13,3 +13,10 @@ uv.lock
 .DS_Store
 tests/fixtures/*.parquet
 !tests/fixtures/README.md
+
+# IDE
+.idea/
+.vscode/
+
+# Local worktrees for squads / branches
+.worktrees/

@@ -1,0 +1,60 @@
+%% Baseline + monitor data flow.
+%% Reads left-to-right: data → training → baseline → inference → monitor → observability.
+%% Account tags on each box tell you WHERE the step runs.
+
+flowchart LR
+
+d1("<div style='display:flex;align-items:center;gap:12px;min-width:240px;text-align:left'><img src='https://api.iconify.design/material-symbols/inventory-2-rounded.svg?color=%235778A4' width='64' height='64'/><span><b>ML-Ready Data</b><br/><i>ml-data-platform</i></span></div>"):::blue
+
+t1("<div style='display:flex;align-items:center;gap:12px;min-width:240px;text-align:left'><img src='https://api.iconify.design/material-symbols/play-arrow-rounded.svg?color=%23E49444' width='64' height='64'/><span><b>Training Pipeline</b><br/><i>ml-operations</i></span></div>"):::orange
+
+reg("<div style='display:flex;align-items:center;gap:12px;min-width:240px;text-align:left'><img src='https://api.iconify.design/material-symbols/inventory-2-outline-rounded.svg?color=%2385B6B2' width='64' height='64'/><span><b>Model Registry (MPG)</b><br/><i>ml-artifact</i></span></div>"):::teal
+
+mdata("<div style='display:flex;align-items:center;gap:12px;min-width:240px;text-align:left'><img src='https://api.iconify.design/material-symbols/storage-rounded.svg?color=%2385B6B2' width='64' height='64'/><span><b>Model Artefact (S3)</b><br/><i>ml-artifact</i></span></div>"):::teal
+
+snap("<div style='display:flex;align-items:center;gap:12px;min-width:240px;text-align:left'><img src='https://api.iconify.design/material-symbols/upload-rounded.svg?color=%235778A4' width='64' height='64'/><span><b>Training Snapshot (S3)</b><br/><i>ml-artifact</i></span></div>"):::blue
+
+evt{"EventBridge<br/>s3:PutObject"}
+
+bsfn("<div style='display:flex;align-items:center;gap:12px;min-width:240px;text-align:left'><img src='https://api.iconify.design/material-symbols/account-tree-rounded.svg?color=%23A87C9F' width='64' height='64'/><span><b>Baseline SFN</b><br/><i>ml-operations</i></span></div>"):::purple
+
+bpj("<div style='display:flex;align-items:center;gap:12px;min-width:240px;text-align:left'><img src='https://api.iconify.design/material-symbols/bar-chart-4-bars-rounded.svg?color=%23E49444' width='64' height='64'/><span><b>Baseline Processing Job</b><br/><i>ml-operations</i></span></div>"):::orange
+
+aj("<div style='display:flex;align-items:center;gap:12px;min-width:240px;text-align:left'><img src='https://api.iconify.design/material-symbols/description-rounded.svg?color=%2385B6B2' width='64' height='64'/><span><b>analysis.json (S3)</b><br/><i>ml-artifact</i></span></div>"):::teal
+
+ep("<div style='display:flex;align-items:center;gap:12px;min-width:240px;text-align:left'><img src='https://api.iconify.design/material-symbols/rocket-launch-rounded.svg?color=%23E7CA60' width='64' height='64'/><span><b>Endpoint (per tenant)</b><br/><i>ml-inference-*</i></span></div>"):::yellow
+
+cap("<div style='display:flex;align-items:center;gap:12px;min-width:240px;text-align:left'><img src='https://api.iconify.design/material-symbols/save-rounded.svg?color=%235778A4' width='64' height='64'/><span><b>Data Capture (S3)</b><br/><i>ml-inference-*</i></span></div>"):::blue
+
+msch("<div style='display:flex;align-items:center;gap:12px;min-width:240px;text-align:left'><img src='https://api.iconify.design/material-symbols/schedule-rounded.svg?color=%23A87C9F' width='64' height='64'/><span><b>Monitor Schedule</b><br/><i>ml-inference-*</i></span></div>"):::purple
+
+mpj("<div style='display:flex;align-items:center;gap:12px;min-width:240px;text-align:left'><img src='https://api.iconify.design/material-symbols/monitor-heart-rounded.svg?color=%23E49444' width='64' height='64'/><span><b>Monitor Processing Job</b><br/><i>ml-inference-*</i></span></div>"):::orange
+
+cw("<div style='display:flex;align-items:center;gap:12px;min-width:240px;text-align:left'><img src='https://api.iconify.design/material-symbols/analytics-rounded.svg?color=%2385B6B2' width='64' height='64'/><span><b>CloudWatch Metrics</b><br/><i>ml-inference-*</i></span></div>"):::teal
+
+ddb("<div style='display:flex;align-items:center;gap:12px;min-width:240px;text-align:left'><img src='https://api.iconify.design/material-symbols/table-rows-rounded.svg?color=%2385B6B2' width='64' height='64'/><span><b>Outcomes (DynamoDB)</b><br/><i>ml-inference-*</i></span></div>"):::teal
+
+%% Training-side
+d1 --> t1
+t1 --> reg
+t1 --> mdata
+t1 --> snap
+
+%% Baseline compute
+snap --> evt
+evt --> bsfn
+bsfn --> bpj
+mdata --> bpj
+bpj --> aj
+
+%% Inference side
+reg --> ep
+mdata --> ep
+ep --> cap
+
+%% Monitor compute
+msch --> mpj
+cap --> mpj
+aj --> mpj
+mpj --> cw
+mpj --> ddb

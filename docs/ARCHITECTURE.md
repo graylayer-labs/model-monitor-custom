@@ -1,5 +1,27 @@
 # Architecture
 
+## Diagrams
+
+### Account topology
+
+![Account topology](../blob/main/docs/diagrams/accounts.png?raw=true)
+
+Source: [`docs/diagrams/accounts.d2`](diagrams/accounts.d2). Rendered with [D2](https://d2lang.com):
+
+```bash
+d2 --layout=elk docs/diagrams/accounts.d2 docs/diagrams/accounts.png
+```
+
+### Data flow
+
+![Data flow](../blob/main/docs/diagrams/data-flow.png?raw=true)
+
+Source: [`docs/diagrams/data-flow.mmd`](diagrams/data-flow.mmd). Rendered with Mermaid via [`ufx-mermaid`](https://github.com/EoinMcUF/ufx-mermaid):
+
+```bash
+~/.claude/skills/ufx-mermaid/render.sh docs/diagrams/data-flow.mmd docs/diagrams/data-flow.png
+```
+
 ## Overview
 
 `model-monitor-custom` provides two containers and a CDK library that together replace SageMaker Model Monitor + Clarify:
@@ -24,7 +46,7 @@ ML Domain
 │                         GitHub Actions role for CI-driven deploys.
 │                         Writes baselines up to ml-artifact.
 │
-├── ml-data-platform      Raw data + ML-ready datasets.
+├── (ml-data-platform — upstream, out of scope)      Raw data + ML-ready datasets.
 │                         Upstream of this project — we do not touch it.
 │
 ├── ml-dev                Sandbox: SageMaker Studio Lab, dev notebooks.

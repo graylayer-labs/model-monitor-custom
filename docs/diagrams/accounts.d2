@@ -1,0 +1,93 @@
+# Account topology assumed by model-monitor-custom.
+# No arrows — this is a "where do things live" view.
+# Data flow lives in data-flow.mmd.
+#
+# Layout: four core accounts across the top, downstream consumers below Inference Plane.
+# Reads L→R as the pipeline: dev iterates → ops trains → artifact stores → inference serves.
+#
+#   ┌─────────┬───────────────┬─────────────┬────────────────────┐
+#   │ ml-dev  │ ml-operations │ ml-artifact │ Inference Plane    │
+#   │ (sand-  │  (training +  │ (registry + │  test | prod       │
+#   │  box)   │   baseline)   │  artefacts) │                    │
+#   └─────────┴───────────────┴─────────────┼────────────────────┤
+#                                           │ Downstream         │
+#                                           │ Consumers          │
+#                                           └────────────────────┘
+#
+# ml-data-platform is upstream infrastructure and outside this project's scope.
+
+vars: {
+  d2-config: {
+    layout-engine: elk
+    theme-id: 0
+  }
+}
+
+domain: "ML Domain" {
+  style: {
+    stroke-dash: 4
+    stroke: "#B8B0AC"
+    font-color: "#3A3835"
+    fill: "transparent"
+  }
+
+  # Top strip — four accounts left-to-right
+  row: {
+    label: ""
+    style: { fill: transparent; stroke: transparent; opacity: 0 }
+    grid-columns: 4
+    grid-gap: 40
+
+    dev: "ml-dev (sandbox)" {
+      style: { fill: "#F5F3EF"; stroke: "#6E6B66" }
+      grid-columns: 1
+      nb: "Dev Notebook"          { shape: rectangle; style.fill: "#ECF4F3"; style.stroke: "#85B6B2"; style.stroke-width: 3 }
+      ic: "Identity Center Users" { shape: rectangle; style.fill: "#F3EBF0"; style.stroke: "#A87C9F"; style.stroke-width: 3 }
+    }
+
+    ops: ml-operations {
+      style: { fill: "#F5F3EF"; stroke: "#6E6B66" }
+      grid-columns: 1
+      training: "Training Pipelines"      { shape: rectangle; style.fill: "#FBEFE3"; style.stroke: "#E49444"; style.stroke-width: 3 }
+      baseline: "Baseline Processing Job" { shape: rectangle; style.fill: "#FBEFE3"; style.stroke: "#E49444"; style.stroke-width: 3 }
+      gh:       "GH Actions Role"         { shape: rectangle; style.fill: "#FCF1F2"; style.stroke: "#F1A2A9"; style.stroke-width: 3 }
+    }
+
+    artifact: ml-artifact {
+      style: { fill: "#F5F3EF"; stroke: "#6E6B66" }
+      grid-columns: 1
+      md:  "Model Data — S3"           { shape: rectangle; style.fill: "#ECF4F3"; style.stroke: "#85B6B2"; style.stroke-width: 3 }
+      mb:  "Monitoring Baselines — S3" { shape: rectangle; style.fill: "#ECF4F3"; style.stroke: "#85B6B2"; style.stroke-width: 3 }
+      mpg: "Model Registry — MPG"      { shape: rectangle; style.fill: "#ECF4F3"; style.stroke: "#85B6B2"; style.stroke-width: 3 }
+    }
+
+    plane: "Inference Plane" {
+      style: { fill: transparent; stroke: "#B8B0AC"; stroke-dash: 4; font-color: "#3A3835" }
+      grid-columns: 2
+      grid-gap: 24
+
+      test: ml-inference-test {
+        style: { fill: "#F5F3EF"; stroke: "#6E6B66" }
+        grid-columns: 1
+        ep:  "Endpoint — per tenant"  { shape: rectangle; style.fill: "#FBF7E7"; style.stroke: "#E7CA60"; style.stroke-width: 3 }
+        mon: "Monitor Processing Job" { shape: rectangle; style.fill: "#FBEFE3"; style.stroke: "#E49444"; style.stroke-width: 3 }
+      }
+      prod: ml-inference-prod {
+        style: { fill: "#F5F3EF"; stroke: "#6E6B66" }
+        grid-columns: 1
+        ep:   "Endpoint — per tenant"  { shape: rectangle; style.fill: "#FBF7E7"; style.stroke: "#E7CA60"; style.stroke-width: 3 }
+        mon:  "Monitor Processing Job" { shape: rectangle; style.fill: "#FBEFE3"; style.stroke: "#E49444"; style.stroke-width: 3 }
+        silo: "Silo Invoke Role"       { shape: rectangle; style.fill: "#FCF1F2"; style.stroke: "#F1A2A9"; style.stroke-width: 3 }
+      }
+    }
+  }
+
+  # Bottom-right — downstream consumers, tucked under Inference Plane
+  backends: "Downstream Consumers" {
+    style: { fill: "#F5F3EF"; stroke: "#6E6B66" }
+    grid-columns: 2
+    grid-gap: 20
+    bt: "BACKEND TEST" { shape: rectangle; style.fill: "#F4F3F2"; style.stroke: "#B8B0AC"; style.stroke-width: 3 }
+    bp: "BACKEND PROD" { shape: rectangle; style.fill: "#F4F3F2"; style.stroke: "#B8B0AC"; style.stroke-width: 3 }
+  }
+}
