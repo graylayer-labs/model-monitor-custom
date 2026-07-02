@@ -1,0 +1,32 @@
+flowchart LR
+
+producer("<div style='display:flex;align-items:center;gap:12px;min-width:180px;text-align:left'><img src='https://api.iconify.design/material-symbols/factory-rounded.svg?color=%23B8B0AC' width='64' height='64'/><span><b>Any producer</b><br/><i>e.g. training pipeline</i></span></div>"):::grey
+
+s1("<div style='display:flex;align-items:center;gap:12px;min-width:200px;text-align:left'><img src='https://api.iconify.design/material-symbols/upload-rounded.svg?color=%235778A4' width='64' height='64'/><span><b>S3</b><br/><code>&lt;project&gt;/v&lt;N&gt;/input/</code><br/><i>schema: snapshot-input</i></span></div>"):::blue
+
+evt{"EventBridge<br/>s3:ObjectCreated"}
+
+sfn("<div style='display:flex;align-items:center;gap:12px;min-width:180px;text-align:left'><img src='https://api.iconify.design/material-symbols/account-tree-rounded.svg?color=%23A87C9F' width='64' height='64'/><span><b>Step Functions</b><br/>Parallel state<br/><i>ecs:runTask.sync</i></span></div>"):::purple
+
+subgraph analysers["Snapshot analysers — ECS Fargate (parallel)"]
+  direction TB
+  job_mq("<div style='display:flex;align-items:center;gap:8px;min-width:150px;text-align:left'><img src='https://api.iconify.design/material-symbols/deployed-code.svg?color=%23E49444' width='48' height='48'/><span>Model Quality</span></div>"):::orange
+  job_dq("<div style='display:flex;align-items:center;gap:8px;min-width:150px;text-align:left'><img src='https://api.iconify.design/material-symbols/deployed-code.svg?color=%23E49444' width='48' height='48'/><span>Data Quality</span></div>"):::orange
+  job_bias("<div style='display:flex;align-items:center;gap:8px;min-width:150px;text-align:left'><img src='https://api.iconify.design/material-symbols/deployed-code.svg?color=%23E49444' width='48' height='48'/><span>Bias</span></div>"):::orange
+  job_exp("<div style='display:flex;align-items:center;gap:8px;min-width:150px;text-align:left'><img src='https://api.iconify.design/material-symbols/deployed-code.svg?color=%23E49444' width='48' height='48'/><span>Explainability</span></div>"):::orange
+end
+
+ecr("<div style='display:flex;align-items:center;gap:12px;min-width:180px;text-align:left'><img src='https://api.iconify.design/material-symbols/inventory-2-rounded.svg?color=%2385B6B2' width='64' height='64'/><span><b>ECR</b><br/>4× analyser images</span></div>"):::teal
+
+out("<div style='display:flex;align-items:center;gap:12px;min-width:200px;text-align:left'><img src='https://api.iconify.design/material-symbols/description-rounded.svg?color=%2385B6B2' width='64' height='64'/><span><b>S3</b><br/><code>&lt;project&gt;/v&lt;N&gt;/output/</code><br/><i>schema: snapshot-output</i></span></div>"):::teal
+logs("<div style='display:flex;align-items:center;gap:12px;min-width:180px;text-align:left'><img src='https://api.iconify.design/material-symbols/receipt-long-rounded.svg?color=%2385B6B2' width='64' height='64'/><span><b>CloudWatch</b><br/>Logs</span></div>"):::teal
+fail("<div style='display:flex;align-items:center;gap:12px;min-width:180px;text-align:left'><img src='https://api.iconify.design/material-symbols/error-rounded.svg?color=%23D1615D' width='64' height='64'/><span><b>DynamoDB</b><br/>Failure markers<br/><i>per-branch Catch</i></span></div>"):::grey
+
+producer --> s1
+s1 --> evt --> sfn
+sfn -->|launch: env-override payload| analysers
+s1 -.->|container reads| analysers
+ecr -.->|task pulls image| analysers
+analysers --> out
+analysers --> logs
+analysers -.->|Catch| fail

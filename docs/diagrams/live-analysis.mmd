@@ -1,0 +1,48 @@
+flowchart LR
+
+ep("<div style='display:flex;align-items:center;gap:12px;min-width:180px;text-align:left'><img src='https://api.iconify.design/material-symbols/rocket-launch-rounded.svg?color=%23E7CA60' width='64' height='64'/><span><b>Endpoint</b><br/>prod + shadow</span></div>"):::yellow
+cap("<div style='display:flex;align-items:center;gap:12px;min-width:180px;text-align:left'><img src='https://api.iconify.design/material-symbols/photo-camera-rounded.svg?color=%235778A4' width='64' height='64'/><span><b>S3</b><br/>Live capture</span></div>"):::blue
+gt("<div style='display:flex;align-items:center;gap:12px;min-width:180px;text-align:left'><img src='https://api.iconify.design/material-symbols/verified-rounded.svg?color=%235778A4' width='64' height='64'/><span><b>S3</b><br/>Ground truth</span></div>"):::blue
+
+cron{"EventBridge<br/>Scheduler (cron)"}
+
+sfn("<div style='display:flex;align-items:center;gap:12px;min-width:180px;text-align:left'><img src='https://api.iconify.design/material-symbols/account-tree-rounded.svg?color=%23A87C9F' width='64' height='64'/><span><b>Step Functions</b><br/>Parallel state<br/><i>ecs:runTask.sync</i></span></div>"):::purple
+
+subgraph analysers["Live analysers — ECS Fargate (parallel)"]
+  direction TB
+  j_mq("<div style='display:flex;align-items:center;gap:8px;min-width:150px;text-align:left'><img src='https://api.iconify.design/material-symbols/deployed-code.svg?color=%23E49444' width='48' height='48'/><span>Model Quality</span></div>"):::orange
+  j_dq("<div style='display:flex;align-items:center;gap:8px;min-width:150px;text-align:left'><img src='https://api.iconify.design/material-symbols/deployed-code.svg?color=%23E49444' width='48' height='48'/><span>Data Quality</span></div>"):::orange
+  j_bias("<div style='display:flex;align-items:center;gap:8px;min-width:150px;text-align:left'><img src='https://api.iconify.design/material-symbols/deployed-code.svg?color=%23E49444' width='48' height='48'/><span>Bias</span></div>"):::orange
+  j_exp("<div style='display:flex;align-items:center;gap:8px;min-width:150px;text-align:left'><img src='https://api.iconify.design/material-symbols/deployed-code.svg?color=%23E49444' width='48' height='48'/><span>Explainability</span></div>"):::orange
+  j_shd("<div style='display:flex;align-items:center;gap:8px;min-width:150px;text-align:left'><img src='https://api.iconify.design/material-symbols/compare-arrows-rounded.svg?color=%23E49444' width='48' height='48'/><span>Shadow</span></div>"):::orange
+end
+
+snap("<div style='display:flex;align-items:center;gap:12px;min-width:200px;text-align:left'><img src='https://api.iconify.design/material-symbols/description-rounded.svg?color=%2385B6B2' width='64' height='64'/><span><b>S3</b><br/><code>&lt;project&gt;/v&lt;N&gt;/output/</code><br/><i>schema: snapshot-output</i></span></div>"):::teal
+ecr("<div style='display:flex;align-items:center;gap:12px;min-width:180px;text-align:left'><img src='https://api.iconify.design/material-symbols/inventory-2-rounded.svg?color=%2385B6B2' width='64' height='64'/><span><b>ECR</b><br/>5× analyser images</span></div>"):::teal
+
+cw("<div style='display:flex;align-items:center;gap:12px;min-width:180px;text-align:left'><img src='https://api.iconify.design/material-symbols/analytics-rounded.svg?color=%2385B6B2' width='64' height='64'/><span><b>CloudWatch</b><br/>Metrics</span></div>"):::teal
+ddb("<div style='display:flex;align-items:center;gap:12px;min-width:180px;text-align:left'><img src='https://api.iconify.design/material-symbols/table-rows-rounded.svg?color=%2385B6B2' width='64' height='64'/><span><b>DynamoDB</b><br/>Outcomes<br/><i>schema: live-output</i></span></div>"):::teal
+logs("<div style='display:flex;align-items:center;gap:12px;min-width:180px;text-align:left'><img src='https://api.iconify.design/material-symbols/receipt-long-rounded.svg?color=%2385B6B2' width='64' height='64'/><span><b>CloudWatch</b><br/>Logs</span></div>"):::teal
+
+pipes{"EventBridge<br/>Pipes"}
+notif("<div style='display:flex;align-items:center;gap:12px;min-width:180px;text-align:left'><img src='https://api.iconify.design/material-symbols/refresh-rounded.svg?color=%23B8B0AC' width='64' height='64'/><span><b>Lambda</b><br/>Notifier</span></div>"):::grey
+arch("<div style='display:flex;align-items:center;gap:12px;min-width:180px;text-align:left'><img src='https://api.iconify.design/material-symbols/refresh-rounded.svg?color=%23B8B0AC' width='64' height='64'/><span><b>Lambda</b><br/>Archive</span></div>"):::grey
+s3arch("<div style='display:flex;align-items:center;gap:12px;min-width:180px;text-align:left'><img src='https://api.iconify.design/material-symbols/inventory-2-rounded.svg?color=%235778A4' width='64' height='64'/><span><b>S3</b><br/>Archive bucket</span></div>"):::blue
+
+ep --> cap
+ep --> gt
+cron --> sfn
+sfn -->|launch: env-override payload| analysers
+
+snap -.->|container reads| analysers
+cap -.->|container reads| analysers
+gt -.->|container reads| analysers
+ecr -.->|task pulls image| analysers
+
+analysers --> cw
+analysers --> ddb
+analysers --> logs
+
+ddb --> pipes
+pipes --> notif
+pipes --> arch --> s3arch

@@ -32,6 +32,126 @@ So the runtime has two shapes:
 - **Baseline-dependent analyzers** (MQ, DQ, Bias, Explainability) — need step 1 to produce their file, then step 2 consumes it.
 - **Baseline-independent analyzer** (Shadow) — only step 2, and only when the endpoint has a shadow variant.
 
+## System boundaries — three decoupled subsystems
+
+Three subsystems, coupled by **published JSON schemas** (not code).
+
+```
+[ Producer ]  →  input/  →  [ Snapshot analysis ]  →  output/  →  [ Live analysis ]  →  CW / DDB
+    ↑              ↑                                    ↑
+   any            config.json                          result.json
+   producer       snapshot.jsonl                       (published schema)
+                  (published schema)
+```
+
+- **Producer** — training pipeline, notebook, manual `aws s3 cp` — anything that can write to S3. Not our concern how it gets there.
+- **Snapshot analysis** — reads `input/`, computes per-analyser results, writes `output/`.
+- **Live analysis** — reads `output/`, diffs against current-window inference data, emits CloudWatch metrics + DynamoDB rows.
+
+Each subsystem owns **one output schema**. Downstream consumers depend on the schema, not on the code. Schema versions are treated like any other API — breaking changes get a version bump.
+
+**Published schemas (in `shared/`):**
+
+| Schema | Producer | Consumer |
+|---|---|---|
+| `snapshot-input-schema.json` | any producer (typically train pipeline) | snapshot analysers |
+| `snapshot-output-schema.json` | snapshot analysers | live analysers |
+| `live-output-schema.json` | live analysers | CloudWatch / DynamoDB — external observability |
+
+**Optional Python helper** `monitor-publish` (also in `shared/`) — wraps schema validation + S3 write for producers who want convenience. Not required — producers can bypass and do raw S3 puts as long as the output validates against the schema.
+
+**S3 layout (contract, not implementation detail):**
+
+```
+s3://baselines-bucket/<project>/v<N>/
+├── input/
+│   ├── config.json      monitoring config (schema: snapshot-input)
+│   ├── snapshot.jsonl   training-time data snapshot
+│   └── (predictions.jsonl)  optional — for MQ if predictions available
+├── output/              snapshot analysers write here
+│   ├── mq/result.json           (schema: snapshot-output)
+│   ├── dq/result.json
+│   ├── bias/result.json
+│   ├── explain/result.json
+│   ├── {analyser}/_provenance.json
+│   └── {analyser}/failure.json  (only on error)
+└── _provenance.json     emitted by producer — image digest, git SHA, timestamps
+```
+
+Immutable per `<N>`. Never overwrite a version — new state = new directory.
+
+## Container I/O contract
+
+Every analyser container — snapshot or live, all five kinds — implements the **same input/output protocol**. The contract lives in the `shared/` package and is enforced by Pydantic at container startup.
+
+Grounded in the SFN research: teams overwhelmingly launch containers with a small structured env-var payload and let the container fetch anything larger itself (research doc: `SFN_STATE_STRUCTURE_RESEARCH.md`).
+
+### Inputs — what SFN passes as `ContainerOverrides.Environment`
+
+| Env var | Type | Meaning |
+|---|---|---|
+| `PROJECT_NAME` | str | Project slug, e.g. `example-classifier`. |
+| `RUN_ID` | str | UUID / SFN execution name. Correlates all outputs of this run. |
+| `ANALYSER_TYPE` | enum | `mq` \| `dq` \| `bias` \| `explain` \| `shadow`. |
+| `INPUT_URIS_JSON` | JSON str | `{"snapshot": "s3://…", "capture": "s3://…", "gt": "s3://…", "model": "s3://…"}` — nulls omitted. |
+| `OUTPUT_URI` | str | `s3://…` prefix where the container writes results. |
+| `CONFIG_URI` | str | `s3://…/config.json` — full project config as a versioned S3 object. |
+
+**Total payload well under 8 KB** (ECS `ContainerOverrides` limit). No SSM Parameter Store in the runtime path — config lives in S3 as a versioned JSON file, KMS-encrypted, IAM'd. Simpler + trivially reproducible locally.
+
+### Outputs — what the container writes
+
+| Path | Contents |
+|---|---|
+| `OUTPUT_URI/result.json` | Pydantic-validated `AnalyserOutput` — the analyser's actual result. |
+| `OUTPUT_URI/_provenance.json` | Container image digest, git SHA, timestamps, `run_id`. |
+| `OUTPUT_URI/failure.json` | Only on error. Structured exception + full traceback. |
+
+Plus (direct AWS SDK from container, own IAM):
+
+- **CloudWatch Metrics** — per-analyser namespace, dims `PackageGroupName · SiloId · MonitorType · Variant`.
+- **DynamoDB outcome row** — one per (execution, analyser).
+- **CloudWatch Logs** — automatic via ECS task log driver.
+
+### Failure semantics
+
+Each SFN branch wraps its container task in:
+
+- **Retry** on `States.TaskFailed` / `ECS.AmazonECSException` — max 3 attempts, exponential backoff.
+- **Catch** on `States.ALL` → routes to a `MarkBranchFailed` state that writes a DDB failure marker.
+
+This satisfies the "one branch dying does not kill siblings" requirement (SFN research §7).
+
+### Why S3 for config, not SSM
+
+Real-world reference architectures ([SFN_STATE_STRUCTURE_RESEARCH.md](SFN_STATE_STRUCTURE_RESEARCH.md)) overwhelmingly use S3 for structured config that a container needs to fetch. Reasons:
+
+- One IAM story — the container already needs S3 for input/output.
+- Versioned — S3 versioning gives free config-history.
+- Diffable — `aws s3 cp s3://…/config.json - | jq` beats `aws ssm get-parameter-history`.
+- Local dev — a real file in a real bucket beats "mock SSM".
+- No extra service call — the container reads all its inputs from S3 in one go.
+
+SSM Parameter Store remains available for deploy-time / infra config; it is not on the runtime hot path.
+
+### Local reproduction
+
+Same env-var contract, same S3 fetches:
+
+```bash
+docker run --rm \
+  -e PROJECT_NAME=example-classifier \
+  -e RUN_ID=local-dev-1 \
+  -e ANALYSER_TYPE=bias \
+  -e INPUT_URIS_JSON='{"snapshot":"s3://.../snapshot.jsonl"}' \
+  -e OUTPUT_URI=s3://.../out/local-dev-1/bias \
+  -e CONFIG_URI=s3://.../config.json \
+  -e AWS_PROFILE=dev \
+  analyser-bias:latest
+```
+
+No SFN, no ECS, no CDK — same container, same result.
+
 ## Diagrams
 
 ### Account topology
@@ -44,14 +164,22 @@ Source: [`docs/diagrams/accounts.d2`](diagrams/accounts.d2). Rendered with [D2](
 d2 --layout=elk docs/diagrams/accounts.d2 docs/diagrams/accounts.png
 ```
 
-### Data flow
+### Snapshot analysis (one-shot, per model version)
 
-![Data flow](../blob/main/docs/diagrams/data-flow.png?raw=true)
+![Snapshot analysis](../blob/main/docs/diagrams/snapshot-analysis.png?raw=true)
 
-Source: [`docs/diagrams/data-flow.mmd`](diagrams/data-flow.mmd). Rendered with Mermaid via [`ufx-mermaid`](https://github.com/EoinMcUF/ufx-mermaid):
+Source: [`docs/diagrams/snapshot-analysis.mmd`](diagrams/snapshot-analysis.mmd).
+
+### Live analysis (recurring, per endpoint)
+
+![Live analysis](../blob/main/docs/diagrams/live-analysis.png?raw=true)
+
+Source: [`docs/diagrams/live-analysis.mmd`](diagrams/live-analysis.mmd).
+
+Both mermaid diagrams rendered via [`ufx-mermaid`](https://github.com/EoinMcUF/ufx-mermaid):
 
 ```bash
-~/.claude/skills/ufx-mermaid/render.sh docs/diagrams/data-flow.mmd docs/diagrams/data-flow.png
+~/.claude/skills/ufx-mermaid/render.sh docs/diagrams/<file>.mmd docs/diagrams/<file>.png
 ```
 
 ## Overview

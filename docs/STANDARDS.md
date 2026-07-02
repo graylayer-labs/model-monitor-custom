@@ -48,6 +48,31 @@ Rules in effect (from `ruff.toml`): `A ANN B BLE C4 C90 COM D DOC DTZ E ERA F I 
 - **ARCHITECTURE.md at root** — how the pieces fit. Kept in sync with code by policy; drift = bug.
 - **Design docs in `docs/`** — long-form. Don't restate types or config schemas; those live near the code and stay authoritative.
 
+### Diagrams stay in sync
+
+The three canonical diagrams live in `docs/diagrams/`:
+
+- `accounts.png` — AWS account topology
+- `snapshot-analysis.png` — one-shot baseline compute
+- `live-analysis.png` — recurring drift monitoring
+
+**Every PR that changes runtime behaviour must update the affected diagram** (and its `.mmd` / `.d2` source) in the same PR. If a change alters:
+
+- The container I/O contract (env vars, output shape) → update both flow diagrams.
+- The S3 layout (paths, schemas) → update both flow diagrams.
+- The AWS resource shape (new service, new IAM boundary) → update the affected flow diagram.
+- The account topology (add/remove an account, cross-account grant shape) → update `accounts.png`.
+
+Rendering:
+
+```bash
+d2 --layout=elk docs/diagrams/accounts.d2 docs/diagrams/accounts.png
+~/.claude/skills/ufx-mermaid/render.sh docs/diagrams/snapshot-analysis.mmd docs/diagrams/snapshot-analysis.png
+~/.claude/skills/ufx-mermaid/render.sh docs/diagrams/live-analysis.mmd docs/diagrams/live-analysis.png
+```
+
+Both the source and the rendered PNG go in git — reviewers see the diff in the PNG, source stays editable.
+
 ## Config immutability
 
 - **Never weaken lint / type / test config to make a change land.** Fix the code. If a rule is wrong for the project, propose a change to `ruff.toml` in its own PR with rationale.
