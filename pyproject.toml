@@ -13,15 +13,17 @@ dependencies = [
     "model-baseline",
     "model-monitor-cdk",
     "mmc-base",
+    "mmc-analyser-bias",
 ]
 
 [tool.uv.workspace]
-members = ["containers/baseline", "containers/base", "cdk"]
+members = ["containers/baseline", "containers/base", "containers/bias", "cdk"]
 
 [tool.uv.sources]
 model-baseline = { workspace = true }
 model-monitor-cdk = { workspace = true }
 mmc-base = { workspace = true }
+mmc-analyser-bias = { workspace = true }
 
 [dependency-groups]
 dev = [
