@@ -1,0 +1,88 @@
+name: Anti-SageMaker Guardrail
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  grep-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Grep for SageMaker-shaped patterns
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          patterns=(
+            'SM_MODEL_DIR'
+            'SM_CHANNEL'
+            'SM_OUTPUT'
+            '/opt/ml/'
+            'CreateProcessingJob'
+            'content_template'
+            'probability_attribute'
+            'MonitoringExecution'
+            'SageMaker Model Monitoring Execution Status Change'
+            'import sagemaker'
+            'from sagemaker'
+          )
+
+          regex=$(IFS='|'; echo "${patterns[*]}")
+
+          # Restrict to tracked files, exclude ADR/research/self/misc via pathspecs.
+          matches=$(git grep -n -E -- "$regex" -- \
+            ':(exclude).github/workflows/anti-sagemaker.yml' \
+            ':(exclude)docs/design/003-anti-sagemaker-guardrails.md' \
+            ':(exclude)docs/research/**' \
+            ':(exclude)docs/SM_MODEL_MONITOR_ASSESSMENT.md' \
+            ':(exclude)README.md' \
+            ':(exclude)docs/ROADMAP.md' \
+            ':(exclude)**/*.parquet' \
+            ':(exclude)**/*.lock' \
+            ':(exclude)**/htmlcov/**' \
+            || true)
+
+          if [ -n "$matches" ]; then
+            echo "::error::SageMaker-shaped code detected. See docs/design/003-anti-sagemaker-guardrails.md (guardrail #3)."
+            echo ""
+            echo "Offending matches:"
+            echo "$matches"
+            exit 1
+          fi
+
+          echo "No SageMaker-shaped patterns found. Guardrail #3 clean."
+
+      - name: Self-test (negative case must trigger failure)
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          patterns=(
+            'SM_MODEL_DIR'
+            'SM_CHANNEL'
+            'SM_OUTPUT'
+            '/opt/ml/'
+            'CreateProcessingJob'
+            'content_template'
+            'probability_attribute'
+            'MonitoringExecution'
+            'SageMaker Model Monitoring Execution Status Change'
+            'import sagemaker'
+            'from sagemaker'
+          )
+          regex=$(IFS='|'; echo "${patterns[*]}")
+
+          tmp=$(mktemp)
+          # shellcheck disable=SC2016
+          printf 'export SM_MODEL_DIR=/opt/ml/model\n' > "$tmp"
+
+          if grep -E -n -- "$regex" "$tmp" >/dev/null; then
+            echo "Self-test OK: regex matches synthetic SageMaker phrase."
+            rm -f "$tmp"
+          else
+            echo "::error::Self-test failed — regex did not match a known SageMaker phrase."
+            rm -f "$tmp"
+            exit 1
+          fi

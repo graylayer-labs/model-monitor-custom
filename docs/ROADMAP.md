@@ -39,7 +39,7 @@ Build order (see `design/001-iac-layout.md` Phase 2 section):
 - [ ] **2.5a — `containers/base/` (mmc/analyser-base).** Per `design/002-container-base.md`. Entrypoint, contract Pydantic models, S3/DDB/CW clients, provenance, failure sidecar, Analyser Protocol, SageMaker ban-list guard (per `design/003`). Contract test harness (reusable fixtures). RED tests first.
 - [ ] **2.5b — `containers/bias/` skeleton with NoopAnalyser.** `FROM mmc/analyser-base:sha-<pinned>`. Implements `Analyser` Protocol returning a canned `AnalyserOutput`. Proves the base + analyser pattern end-to-end. Real bias math is Phase 3.
 - [ ] **2.6 — Push real images + redeploy.** Push base + bias images to ECR. Redeploy `InferenceMonitorStack`. Verify same SFN wiring picks up the new images. End-to-end run writes `result.json` + `_provenance.json` to S3 + one DDB row per branch.
-- [ ] **2.7 — Guardrails live in CI.** `.github/workflows/anti-sagemaker.yml` per `design/003` — grep-guard fails on `SM_MODEL_DIR|SM_CHANNEL|/opt/ml/|content_template|CreateProcessingJob|MonitoringExecution`. Runs on every PR.
+- [x] **2.7 — Guardrails live in CI.** [`.github/workflows/anti-sagemaker.yml`](../.github/workflows/anti-sagemaker.yml) per `design/003` — grep-guard fails on `SM_MODEL_DIR|SM_CHANNEL|/opt/ml/|content_template|CreateProcessingJob|MonitoringExecution`. Runs on every PR.
 
 ### Prior phase (kept for reference — completed)
 
