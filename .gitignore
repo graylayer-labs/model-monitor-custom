@@ -19,6 +19,9 @@ tests/fixtures/adult.data
 # Squad artefacts — never committed
 SQUAD_BRIEF.md
 
+# CDK
+cdk.out/
+
 # IDE
 .idea/
 .vscode/
