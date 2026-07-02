@@ -16,3 +16,6 @@ Canonical design decisions for `model-monitor-custom`. ADR-style.
 | [001](001-iac-layout.md) | IaC layout — 4 stacks, `cdk deploy --profile`, mono-repo | Accepted |
 | [002](002-container-base.md) | Container base image + analyser pattern | Accepted |
 | [003](003-anti-sagemaker-guardrails.md) | Anti-SageMaker guardrails (CI grep, ban-list, port headers) | Accepted |
+| [004](004-schema-evolution.md) | Schema evolution — SemVer, additive-only, dual-emit on breaking | Accepted |
+| [006](006-observability-contract.md) | Observability contract — CW namespace, DDB row shape, logging | Accepted |
+| [007](007-failure-taxonomy.md) | Failure taxonomy — 6-way Outcome + orthogonal Severity, `failure.json` sidecar | Accepted |
