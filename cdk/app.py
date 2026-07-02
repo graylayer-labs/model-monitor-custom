@@ -12,6 +12,7 @@ from model_monitor_cdk.stacks.inference_monitor_stack import (
     InferenceMonitorStack,
     InferenceMonitorStackProps,
 )
+from model_monitor_cdk.stacks.shared_iam_stack import SharedIamStack, SharedIamStackProps
 
 app = cdk.App()
 
@@ -29,13 +30,24 @@ _ANALYSER_IMAGES: dict[str, str] = {
 }
 
 if target_account_name == "ml-artifact":
-    ArtifactStack(
+    artifact = ArtifactStack(
         app,
         "MMC-Test-Artifact",
         props=ArtifactStackProps(
             environment="test",
             consumer_account_ids=[_ML_INFERENCE_ACCOUNT_TEST],
             operations_account_id=_ML_OPERATIONS_ACCOUNT,
+        ),
+    )
+    SharedIamStack(
+        app,
+        "MMC-Test-SharedIam",
+        props=SharedIamStackProps(
+            environment="test",
+            reader_accounts=[_ML_INFERENCE_ACCOUNT_TEST],
+            writer_account_id=_ML_OPERATIONS_ACCOUNT,
+            baselines_bucket_arn=artifact.baselines_bucket.bucket_arn,
+            artifact_kms_key_arn=artifact.kms_key.key_arn,
         ),
     )
 

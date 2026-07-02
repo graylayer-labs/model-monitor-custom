@@ -115,13 +115,17 @@ class ArtifactStack(Stack):
         operations_principal = iam.AccountPrincipal(props.operations_account_id)
         all_reader_principals = [*consumer_principals, operations_principal]
 
-        key = self._build_kms_key(all_reader_principals)
-        bucket = self._build_bucket(key, consumer_principals, operations_principal)
+        self.kms_key: kms.Key = self._build_kms_key(all_reader_principals)
+        self.baselines_bucket: s3.Bucket = self._build_bucket(
+            self.kms_key,
+            consumer_principals,
+            operations_principal,
+        )
         self._build_ecr_repos(all_reader_principals)
 
-        CfnOutput(self, "BaselinesBucketName", value=bucket.bucket_name)
-        CfnOutput(self, "BaselinesBucketArn", value=bucket.bucket_arn)
-        CfnOutput(self, "KmsKeyArn", value=key.key_arn)
+        CfnOutput(self, "BaselinesBucketName", value=self.baselines_bucket.bucket_name)
+        CfnOutput(self, "BaselinesBucketArn", value=self.baselines_bucket.bucket_arn)
+        CfnOutput(self, "KmsKeyArn", value=self.kms_key.key_arn)
 
     def _build_kms_key(self, readers: list[iam.AccountPrincipal]) -> kms.Key:
         key = kms.Key(

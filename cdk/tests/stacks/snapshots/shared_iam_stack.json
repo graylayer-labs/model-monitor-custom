@@ -1,0 +1,265 @@
+{
+  "Outputs": {
+    "BaselineReaderRoleArn111111111111": {
+      "Value": {
+        "Fn::GetAtt": [
+          "BaselineReader1111111111119023EFD4",
+          "Arn"
+        ]
+      }
+    },
+    "BaselineReaderRoleArn222222222222": {
+      "Value": {
+        "Fn::GetAtt": [
+          "BaselineReader2222222222227231011D",
+          "Arn"
+        ]
+      }
+    },
+    "BaselineWriterRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "BaselineWriter73AADB9E",
+          "Arn"
+        ]
+      }
+    }
+  },
+  "Parameters": {
+    "BootstrapVersion": {
+      "Default": "/cdk-bootstrap/hnb659fds/version",
+      "Description": "Version of the CDK Bootstrap resources in this environment, automatically retrieved from SSM Parameter Store. [cdk:skip]",
+      "Type": "AWS::SSM::Parameter::Value<String>"
+    }
+  },
+  "Resources": {
+    "BaselineReader1111111111119023EFD4": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":iam::111111111111:root"
+                    ]
+                  ]
+                }
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "MaxSessionDuration": 3600,
+        "Policies": [
+          {
+            "PolicyDocument": {
+              "Statement": [
+                {
+                  "Action": "s3:GetObject",
+                  "Effect": "Allow",
+                  "Resource": "arn:aws:s3:::mmc-baselines-abc/baselines/*",
+                  "Sid": "BaselineRead"
+                },
+                {
+                  "Action": "s3:ListBucket",
+                  "Condition": {
+                    "StringLike": {
+                      "s3:prefix": [
+                        "baselines/*"
+                      ]
+                    }
+                  },
+                  "Effect": "Allow",
+                  "Resource": "arn:aws:s3:::mmc-baselines-abc",
+                  "Sid": "BaselineList"
+                },
+                {
+                  "Action": "kms:Decrypt",
+                  "Effect": "Allow",
+                  "Resource": "arn:aws:kms:eu-west-1:965377249924:key/abcd-efgh",
+                  "Sid": "KmsRead"
+                }
+              ],
+              "Version": "2012-10-17"
+            },
+            "PolicyName": "BaselineReaderPolicy"
+          }
+        ],
+        "RoleName": "mmc-test-baseline-reader-111111111111"
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "BaselineReader2222222222227231011D": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":iam::222222222222:root"
+                    ]
+                  ]
+                }
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "MaxSessionDuration": 3600,
+        "Policies": [
+          {
+            "PolicyDocument": {
+              "Statement": [
+                {
+                  "Action": "s3:GetObject",
+                  "Effect": "Allow",
+                  "Resource": "arn:aws:s3:::mmc-baselines-abc/baselines/*",
+                  "Sid": "BaselineRead"
+                },
+                {
+                  "Action": "s3:ListBucket",
+                  "Condition": {
+                    "StringLike": {
+                      "s3:prefix": [
+                        "baselines/*"
+                      ]
+                    }
+                  },
+                  "Effect": "Allow",
+                  "Resource": "arn:aws:s3:::mmc-baselines-abc",
+                  "Sid": "BaselineList"
+                },
+                {
+                  "Action": "kms:Decrypt",
+                  "Effect": "Allow",
+                  "Resource": "arn:aws:kms:eu-west-1:965377249924:key/abcd-efgh",
+                  "Sid": "KmsRead"
+                }
+              ],
+              "Version": "2012-10-17"
+            },
+            "PolicyName": "BaselineReaderPolicy"
+          }
+        ],
+        "RoleName": "mmc-test-baseline-reader-222222222222"
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "BaselineWriter73AADB9E": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":iam::333333333333:root"
+                    ]
+                  ]
+                }
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "MaxSessionDuration": 3600,
+        "Policies": [
+          {
+            "PolicyDocument": {
+              "Statement": [
+                {
+                  "Action": [
+                    "s3:PutObject",
+                    "s3:GetObject"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": "arn:aws:s3:::mmc-baselines-abc/baselines/*",
+                  "Sid": "BaselineWrite"
+                },
+                {
+                  "Action": "s3:ListBucket",
+                  "Condition": {
+                    "StringLike": {
+                      "s3:prefix": [
+                        "baselines/*"
+                      ]
+                    }
+                  },
+                  "Effect": "Allow",
+                  "Resource": "arn:aws:s3:::mmc-baselines-abc",
+                  "Sid": "BaselineList"
+                },
+                {
+                  "Action": [
+                    "kms:GenerateDataKey",
+                    "kms:Decrypt"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": "arn:aws:kms:eu-west-1:965377249924:key/abcd-efgh",
+                  "Sid": "KmsWrite"
+                }
+              ],
+              "Version": "2012-10-17"
+            },
+            "PolicyName": "BaselineWriterPolicy"
+          }
+        ],
+        "RoleName": "mmc-test-baseline-writer"
+      },
+      "Type": "AWS::IAM::Role"
+    }
+  },
+  "Rules": {
+    "CheckBootstrapVersion": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Not": [
+              {
+                "Fn::Contains": [
+                  [
+                    "1",
+                    "2",
+                    "3",
+                    "4",
+                    "5"
+                  ],
+                  {
+                    "Ref": "BootstrapVersion"
+                  }
+                ]
+              }
+            ]
+          },
+          "AssertDescription": "CDK bootstrap stack version 6 required. Please run 'cdk bootstrap' with a recent version of the CDK CLI."
+        }
+      ]
+    }
+  }
+}
