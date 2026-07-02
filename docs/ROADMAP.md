@@ -27,19 +27,19 @@ A drop-in replacement for SageMaker Model Monitor + Clarify. Own the container. 
 
 ### Task list
 
-- [ ] **1.1 — `ModelAdapter` ABC.** `containers/baseline/src/model_baseline/adapters/base.py`. Abstract methods: `load(model_uri: str) -> None`, `predict_proba(features: pd.DataFrame) -> np.ndarray`, `feature_headers() -> list[str]`, `class_labels() -> list[str]`. Failing test that asserts subclass must implement all four.
-- [ ] **1.2 — `BaselineConfig` schema.** Pydantic model covering dataset URI, config URI, model URI, monitor type, output URI, thresholds. `extra="forbid"`. Failing tests for shape + required fields.
-- [ ] **1.3 — `BiasSpec` schema.** Sub-model: label column, positive-label values, list of `Facet(name, values)`, list of bias methods. Failing tests.
-- [ ] **1.4 — `ExplainSpec` schema.** Sub-model: SHAP num_samples, SHAP background size, agg_method. Failing tests.
-- [ ] **1.5 — `AnalysisReport` output schema.** Pydantic model that serialises to the Clarify-compatible `analysis.json`. Failing test asserting shape parity with a captured real Clarify output (fixture).
-- [ ] **1.6 — Analyzer protocols.** `BiasAnalyzer` and `ExplainabilityAnalyzer` protocols with a single `compute(config: BaselineConfig, adapter: ModelAdapter) -> AnalysisReport` method. Failing tests.
-- [ ] **1.7 — Container entrypoint contract.** `containers/baseline/src/model_baseline/cli.py` — env var parsing + config resolution. Failing tests over the env var → config transformation.
-- [ ] **1.8 — CDK construct props.** `cdk/src/model_monitor_cdk/constructs/analyzer_baseline.py::AnalyzerBaselineProps` dataclass. Fields: ECR image URI, execution role ARN, baselines bucket ref, target account ID, event source. Failing test that a construct instantiation validates props.
-- [ ] **1.9 — Fixture datasets.** `tests/fixtures/`:
+- [x] **1.1 — `ModelAdapter` ABC.** `containers/baseline/src/model_baseline/adapters/base.py`. Abstract methods: `load(model_uri: str) -> None`, `predict_proba(features: pd.DataFrame) -> np.ndarray`, `feature_headers() -> list[str]`, `class_labels() -> list[str]`. Failing test that asserts subclass must implement all four.
+- [x] **1.2 — `BaselineConfig` schema.** Pydantic model covering dataset URI, config URI, model URI, monitor type, output URI, thresholds. `extra="forbid"`. Failing tests for shape + required fields.
+- [x] **1.3 — `BiasSpec` schema.** Sub-model: label column, positive-label values, list of `Facet(name, values)`, list of bias methods. Failing tests.
+- [x] **1.4 — `ExplainSpec` schema.** Sub-model: SHAP num_samples, SHAP background size, agg_method. Failing tests.
+- [x] **1.5 — `AnalysisReport` output schema.** Pydantic model that serialises to the Clarify-compatible `analysis.json`. Failing test asserting shape parity with a captured real Clarify output (fixture).
+- [x] **1.6 — Analyzer protocols.** `BiasAnalyzer` and `ExplainabilityAnalyzer` protocols with a single `compute(config: BaselineConfig, adapter: ModelAdapter) -> AnalysisReport` method. Failing tests.
+- [x] **1.7 — Container entrypoint contract.** `containers/baseline/src/model_baseline/cli.py` — env var parsing + config resolution. Failing tests over the env var → config transformation.
+- [x] **1.8 — CDK construct props.** `cdk/src/model_monitor_cdk/constructs/analyzer_baseline.py::AnalyzerBaselineProps` dataclass. Fields: ECR image URI, execution role ARN, baselines bucket ref, target account ID, event source. Failing test that a construct instantiation validates props.
+- [x] **1.9 — Fixture datasets.** `tests/fixtures/`:
   - `adult.parquet` — UCI Adult census (public bias tutorial dataset).
   - `synthetic_3class.parquet` — deterministic synthetic dataset for SHAP.
   - Each with a README explaining generation.
-- [ ] **1.10 — CI skeleton.** `.github/workflows/lint-and-test.yml` — runs `uv run ruff check`, `uv run ty check`, `uv run pytest`. All three must pass. Fails until Phase 2 implementations pass the RED tests.
+- [x] **1.10 — CI skeleton.** `.github/workflows/lint-and-test.yml` — runs `uv run ruff check`, `uv run ty check`, `uv run pytest`. All three must pass. Fails until Phase 2 implementations pass the RED tests.
 
 ### Exit criteria for Phase 1
 
