@@ -60,3 +60,24 @@ addopts = "-ra --strict-markers --import-mode=importlib"
 markers = [
     "e2e: end-to-end tests that build/run containers (slow, opt-in)",
 ]
+
+[tool.coverage.run]
+branch = true
+source = ["containers", "cdk/src"]
+omit = [
+    "*/tests/*",
+    "*/testing/*",
+    "*/__init__.py",
+    "*/harness.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+precision = 1
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@abstractmethod",
+    "\\.\\.\\.",
+]
