@@ -46,6 +46,8 @@ dev = [
     "boto3>=1.34.0",
     "matplotlib>=3.9.0",
     "moto[dynamodb,s3]>=5.0.0",
+    "pydantic>=2.7.0",
+    "pyyaml>=6.0",
 ]
 
 [build-system]

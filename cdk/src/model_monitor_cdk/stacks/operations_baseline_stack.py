@@ -124,6 +124,7 @@ class OperationsBaselineStackProps:
     producer_bucket_arn: str
     producer_prefix: str = "training-snapshots/"
     analyser_image_uris: dict[str, str] = field(default_factory=dict)
+    vpc_id: str | None = None
     fargate_cpu: int = 1024
     fargate_memory_mib: int = 4096
     sfn_retry_max_attempts: int = 3
@@ -239,7 +240,11 @@ class OperationsBaselineStack(Stack):
             bucket_arn=props.producer_bucket_arn,
         )
 
-        vpc = ec2.Vpc(self, "AnalyserVpc", max_azs=2, nat_gateways=0)
+        vpc: ec2.IVpc = (
+            ec2.Vpc.from_lookup(self, "AnalyserVpc", vpc_id=props.vpc_id)
+            if props.vpc_id
+            else ec2.Vpc(self, "AnalyserVpc", max_azs=2, nat_gateways=0)
+        )
         cluster = ecs.Cluster(
             self,
             "AnalyserCluster",

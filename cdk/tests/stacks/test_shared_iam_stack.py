@@ -37,6 +37,20 @@ def _synth(props: SharedIamStackProps | None = None) -> tuple[SharedIamStack, Te
     return stack, Template.from_stack(stack)
 
 
+def _tag_dict(role_props: dict) -> dict[str, str]:
+    """Return the role's Tags as a ``{key: value}`` dict."""
+    return {t["Key"]: t["Value"] for t in role_props.get("Tags", [])}
+
+
+def _find_role(template: Template, tag_key: str, tag_value: str) -> dict:
+    for logical_id, resource in template.find_resources("AWS::IAM::Role").items():
+        tags = _tag_dict(resource["Properties"])
+        if tags.get(tag_key) == tag_value:
+            return {"logical_id": logical_id, "resource": resource}
+    msg = f"no IAM::Role with {tag_key}={tag_value}"
+    raise AssertionError(msg)
+
+
 def test_synth_valid_props():
     _, template = _synth()
     assert template is not None
@@ -54,23 +68,27 @@ def test_reader_role_count_scales():
     template.resource_count_is("AWS::IAM::Role", 4)
 
 
-def test_reader_role_names():
+def test_reader_roles_tagged_per_account():
     _, template = _synth()
     for account in (READER_A, READER_B):
-        template.has_resource_properties(
-            "AWS::IAM::Role",
-            {"RoleName": f"mmc-test-baseline-reader-{account}"},
-        )
+        found = _find_role(template, "mmc:reader-account", account)
+        tags = _tag_dict(found["resource"]["Properties"])
+        assert tags["mmc:role"] == "baseline-reader"
+        assert tags["mmc:environment"] == "test"
 
 
-def test_writer_role_name_and_trust():
+def test_reader_logical_ids_follow_pattern():
     _, template = _synth()
-    template.has_resource_properties(
-        "AWS::IAM::Role",
-        {"RoleName": "mmc-test-baseline-writer"},
-    )
     roles = template.find_resources("AWS::IAM::Role")
-    writer = next(v for v in roles.values() if v["Properties"].get("RoleName") == "mmc-test-baseline-writer")
+    reader_ids = [lid for lid in roles if lid.startswith("BaselineReader")]
+    assert len(reader_ids) == 2
+    for account in (READER_A, READER_B):
+        assert any(account in lid for lid in reader_ids)
+
+
+def test_writer_role_tag_and_trust():
+    _, template = _synth()
+    writer = _find_role(template, "mmc:role", "baseline-writer")["resource"]
     trust = json.dumps(writer["Properties"]["AssumeRolePolicyDocument"])
     assert WRITER in trust
     assert READER_A not in trust
@@ -79,13 +97,8 @@ def test_writer_role_name_and_trust():
 
 def test_reader_trust_policies_isolated_per_account():
     _, template = _synth()
-    roles = template.find_resources("AWS::IAM::Role")
-    reader_a = next(
-        v for v in roles.values() if v["Properties"].get("RoleName") == f"mmc-test-baseline-reader-{READER_A}"
-    )
-    reader_b = next(
-        v for v in roles.values() if v["Properties"].get("RoleName") == f"mmc-test-baseline-reader-{READER_B}"
-    )
+    reader_a = _find_role(template, "mmc:reader-account", READER_A)["resource"]
+    reader_b = _find_role(template, "mmc:reader-account", READER_B)["resource"]
     trust_a = json.dumps(reader_a["Properties"]["AssumeRolePolicyDocument"])
     trust_b = json.dumps(reader_b["Properties"]["AssumeRolePolicyDocument"])
     assert READER_A in trust_a
@@ -96,10 +109,7 @@ def test_reader_trust_policies_isolated_per_account():
 
 def test_reader_policy_read_only():
     _, template = _synth()
-    roles = template.find_resources("AWS::IAM::Role")
-    reader = next(
-        v for v in roles.values() if v["Properties"].get("RoleName") == f"mmc-test-baseline-reader-{READER_A}"
-    )
+    reader = _find_role(template, "mmc:reader-account", READER_A)["resource"]
     policy = json.dumps(reader["Properties"]["Policies"])
     assert "s3:GetObject" in policy
     assert "kms:Decrypt" in policy
@@ -109,8 +119,7 @@ def test_reader_policy_read_only():
 
 def test_writer_policy_has_put_and_get():
     _, template = _synth()
-    roles = template.find_resources("AWS::IAM::Role")
-    writer = next(v for v in roles.values() if v["Properties"].get("RoleName") == "mmc-test-baseline-writer")
+    writer = _find_role(template, "mmc:role", "baseline-writer")["resource"]
     policy = json.dumps(writer["Properties"]["Policies"])
     assert "s3:PutObject" in policy
     assert "s3:GetObject" in policy
@@ -125,11 +134,16 @@ def test_policies_reference_passed_bucket_and_kms_arns():
         assert KMS_ARN in rendered
 
 
+def test_no_hardcoded_role_names():
+    _, template = _synth()
+    for role in template.find_resources("AWS::IAM::Role").values():
+        assert "RoleName" not in role["Properties"], "role_name must be CDK-generated for multi-project single-account"
+
+
 def test_outputs_present():
     _, template = _synth()
     outputs = template.find_outputs("*")
     assert "BaselineWriterRoleArn" in outputs
-    assert f"BaselineReaderRoleArn{READER_A}" in outputs or f"BaselineReaderRoleArn-{READER_A}" in outputs
     # CDK strips hyphens from output logical IDs; assert either form
     assert any(READER_A in k for k in outputs)
     assert any(READER_B in k for k in outputs)

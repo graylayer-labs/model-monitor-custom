@@ -1,0 +1,14 @@
+# Example projects.yaml — copy to projects.yaml and edit.
+#
+# One entry per monitored model. Each project mints one InferenceMonitorStack
+# in the account named by `inference_account`.
+
+projects:
+  - name: example-classifier
+    # Must match one of the IDs under accounts.roles.inference.
+    inference_account: "111111111111"
+    # EventBridge Scheduler cron for the inference tick (default: hourly).
+    schedule: "cron(0 * * * ? *)"
+    # Optional. VPC ID for InferenceMonitorStack to adopt. Omit or null →
+    # stack creates its own /16 VPC.
+    vpc_id: null

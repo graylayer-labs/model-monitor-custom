@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
-from aws_cdk import CfnOutput, Duration, Environment, Stack
+from aws_cdk import CfnOutput, Duration, Environment, Stack, Tags
 from aws_cdk import aws_iam as iam
 
 if TYPE_CHECKING:
@@ -110,10 +110,15 @@ class SharedIamStack(Stack):
         self.reader_role_arns: dict[str, str] = {}
 
         writer_role = self._build_writer_role()
+        Tags.of(writer_role).add("mmc:role", "baseline-writer")
+        Tags.of(writer_role).add("mmc:environment", props.environment)
         CfnOutput(self, "BaselineWriterRoleArn", value=writer_role.role_arn)
 
         for account_id in props.reader_accounts:
             reader = self._build_reader_role(account_id)
+            Tags.of(reader).add("mmc:role", "baseline-reader")
+            Tags.of(reader).add("mmc:environment", props.environment)
+            Tags.of(reader).add("mmc:reader-account", account_id)
             self.reader_role_arns[account_id] = reader.role_arn
             CfnOutput(
                 self,
@@ -131,7 +136,6 @@ class SharedIamStack(Stack):
         return iam.Role(
             self,
             "BaselineWriter",
-            role_name=f"mmc-{self._props.environment}-baseline-writer",
             assumed_by=iam.AccountPrincipal(self._props.writer_account_id),  # ty: ignore[invalid-argument-type]
             max_session_duration=Duration.hours(1),
             inline_policies={
@@ -162,7 +166,6 @@ class SharedIamStack(Stack):
         return iam.Role(
             self,
             f"BaselineReader-{account_id}",
-            role_name=f"mmc-{self._props.environment}-baseline-reader-{account_id}",
             assumed_by=iam.AccountPrincipal(account_id),  # ty: ignore[invalid-argument-type]
             max_session_duration=Duration.hours(1),
             inline_policies={

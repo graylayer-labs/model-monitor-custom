@@ -1,0 +1,26 @@
+# Example accounts.yaml — copy to accounts.yaml and edit.
+#
+# Which AWS account plays which topology role. Single-account collapse
+# works by repeating the same 12-digit ID under all three roles.
+
+region: eu-west-1
+
+roles:
+  # Owns the baselines S3 bucket, the artifact KMS CMK, and SharedIamStack
+  # (baseline reader/writer roles). Consumed cross-account by everything else.
+  artifact: "111111111111"
+
+  # Runs offline snapshot analysers. Assumes the baseline writer role in
+  # `artifact` to publish snapshots. In single-account topologies this is
+  # the same ID as `artifact`.
+  operations: "111111111111"
+
+  # One entry per inference silo. Each entry gets its own reader role in
+  # SharedIamStack, and each project below picks which one it lives in.
+  inference:
+    - "111111111111"
+
+# Optional. VPC ID for OperationsBaselineStack to adopt (single-account
+# collapse — share a VPC across stacks). Omit or leave null to let the
+# stack create its own /16 VPC.
+operations_vpc_id: null

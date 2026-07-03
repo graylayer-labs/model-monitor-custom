@@ -1,12 +1,17 @@
 """CDK entrypoint for model-monitor-custom.
 
-Instantiates stacks based on ``-c target_account=<name>`` context. Real
-account IDs land later via ``cdk.json`` context or a config module.
+Topology is declared in two YAML files (``environments/accounts.yaml`` +
+``environments/projects.yaml``) — see :mod:`model_monitor_cdk.config` and
+ADR ``009-config-driven-topology``. The same stack code deploys 1-, 2-, or
+3-account setups: CDK filters stacks by ``env.account`` against the
+deploying profile, so ``uv run cdk deploy '*' --profile <p>`` acts on
+whatever the profile owns.
 """
 
 from __future__ import annotations
 
 import aws_cdk as cdk
+from model_monitor_cdk.config import resolve_env_from_context
 from model_monitor_cdk.stacks.artifact_stack import ArtifactStack, ArtifactStackProps
 from model_monitor_cdk.stacks.inference_monitor_stack import (
     InferenceMonitorStack,
@@ -18,77 +23,103 @@ from model_monitor_cdk.stacks.operations_baseline_stack import (
 )
 from model_monitor_cdk.stacks.shared_iam_stack import SharedIamStack, SharedIamStackProps
 
-app = cdk.App()
+_ENV_TAG = "test"
+_ANALYSER_NAMES = ("mq", "dq", "bias", "explain", "shadow")
 
-target_account_name = app.node.try_get_context("target_account")
 
-# TODO(mmc-config): source real account IDs from cdk.json context
-_ML_INFERENCE_ACCOUNT_TEST = "000000000000"  # placeholder
-_ML_ARTIFACT_ACCOUNT = "000000000000"  # placeholder
-_ML_OPERATIONS_ACCOUNT = "000000000000"  # placeholder
-_ARTIFACT_KMS_KEY_ARN = "arn:aws:kms:eu-west-1:000000000000:key/placeholder"
-_BASELINES_BUCKET_ARN = "arn:aws:s3:::mmc-baselines-placeholder"
-_ECR_HOST = "000000000000.dkr.ecr.eu-west-1.amazonaws.com"
-_ANALYSER_IMAGES: dict[str, str] = {
-    name: f"{_ECR_HOST}/mmc/analyser-{name}:sha-placeholder" for name in ("mq", "dq", "bias", "explain", "shadow")
-}
+def _analyser_image_uris(*, artifact_account: str, region: str) -> dict[str, str]:
+    """Build the analyser ECR URI map keyed by analyser type.
 
-if target_account_name == "ml-artifact":
+    Args:
+        artifact_account: 12-digit ml-artifact account ID (ECR host).
+        region: AWS region for the ECR host.
+
+    Returns:
+        Analyser type → ``<host>/mmc/analyser-<name>:latest`` URI.
+    """
+    host = f"{artifact_account}.dkr.ecr.{region}.amazonaws.com"
+    return {name: f"{host}/mmc/analyser-{name}:latest" for name in _ANALYSER_NAMES}
+
+
+def build_app(app: cdk.App) -> cdk.App:
+    """Instantiate every stack the loaded topology declares.
+
+    Args:
+        app: A fresh CDK ``App`` — its context is used to locate the
+            YAML config files.
+
+    Returns:
+        The same ``app`` with stacks attached (for tests).
+    """
+    cfg = resolve_env_from_context(app)
+    accounts = cfg.accounts
+    roles = accounts.roles
+    region = accounts.region
+    analyser_images = _analyser_image_uris(artifact_account=roles.artifact, region=region)
+
     artifact = ArtifactStack(
         app,
-        "MMC-Test-Artifact",
+        f"MMC-{_ENV_TAG.capitalize()}-Artifact",
         props=ArtifactStackProps(
-            environment="test",
-            consumer_account_ids=[_ML_INFERENCE_ACCOUNT_TEST],
-            operations_account_id=_ML_OPERATIONS_ACCOUNT,
+            environment=_ENV_TAG,
+            consumer_account_ids=list(roles.inference),
+            operations_account_id=roles.operations,
         ),
+        env=cdk.Environment(account=roles.artifact, region=region),
     )
+
     SharedIamStack(
         app,
-        "MMC-Test-SharedIam",
+        f"MMC-{_ENV_TAG.capitalize()}-SharedIam",
         props=SharedIamStackProps(
-            environment="test",
-            reader_accounts=[_ML_INFERENCE_ACCOUNT_TEST],
-            writer_account_id=_ML_OPERATIONS_ACCOUNT,
+            environment=_ENV_TAG,
+            reader_accounts=list(roles.inference),
+            writer_account_id=roles.operations,
             baselines_bucket_arn=artifact.baselines_bucket.bucket_arn,
             artifact_kms_key_arn=artifact.kms_key.key_arn,
         ),
+        env=cdk.Environment(account=roles.artifact, region=region),
     )
 
-if target_account_name == "ml-inference-test":
-    InferenceMonitorStack(
-        app,
-        "MMC-Test-InferenceMonitor-Example",
-        props=InferenceMonitorStackProps(
-            environment="test",
-            project_name="example-classifier",
-            consumer_account_id=_ML_INFERENCE_ACCOUNT_TEST,
-            artifact_account_id=_ML_ARTIFACT_ACCOUNT,
-            artifact_kms_key_arn=_ARTIFACT_KMS_KEY_ARN,
-            baselines_bucket_arn=_BASELINES_BUCKET_ARN,
-            analyser_image_uris=_ANALYSER_IMAGES,
-        ),
-        env=cdk.Environment(account=_ML_INFERENCE_ACCOUNT_TEST, region="eu-west-1"),
-    )
+    for project in cfg.projects.projects:
+        InferenceMonitorStack(
+            app,
+            f"MMC-{_ENV_TAG.capitalize()}-InferenceMonitor-{project.name}",
+            props=InferenceMonitorStackProps(
+                environment=_ENV_TAG,
+                project_name=project.name,
+                consumer_account_id=project.inference_account,
+                artifact_account_id=roles.artifact,
+                artifact_kms_key_arn=artifact.kms_key.key_arn,
+                baselines_bucket_arn=artifact.baselines_bucket.bucket_arn,
+                analyser_image_uris=analyser_images,
+                vpc_id=project.vpc_id,
+                schedule_expression=project.schedule,
+            ),
+            env=cdk.Environment(account=project.inference_account, region=region),
+        )
 
-if target_account_name == "ml-operations":
-    # TODO(mmc-config): source the writer role ARN + producer bucket ARN from
-    # context once SharedIamStack outputs are wired through cdk.json.
-    OperationsBaselineStack(
-        app,
-        "MMC-Test-OperationsBaseline-Example",
-        props=OperationsBaselineStackProps(
-            environment="test",
-            project_name="example-classifier",
-            operations_account_id=_ML_OPERATIONS_ACCOUNT,
-            artifact_account_id=_ML_ARTIFACT_ACCOUNT,
-            baselines_bucket_arn=_BASELINES_BUCKET_ARN,
-            artifact_kms_key_arn=_ARTIFACT_KMS_KEY_ARN,
-            baseline_writer_role_arn="arn:aws:iam::000000000000:role/mmc-test-baseline-writer",  # placeholder
-            producer_bucket_arn="arn:aws:s3:::mmc-training-snapshots-placeholder",
-            analyser_image_uris=_ANALYSER_IMAGES,
-        ),
-        env=cdk.Environment(account=_ML_OPERATIONS_ACCOUNT, region="eu-west-1"),
-    )
+        OperationsBaselineStack(
+            app,
+            f"MMC-{_ENV_TAG.capitalize()}-OperationsBaseline-{project.name}",
+            props=OperationsBaselineStackProps(
+                environment=_ENV_TAG,
+                project_name=project.name,
+                operations_account_id=roles.operations,
+                artifact_account_id=roles.artifact,
+                baselines_bucket_arn=artifact.baselines_bucket.bucket_arn,
+                artifact_kms_key_arn=artifact.kms_key.key_arn,
+                baseline_writer_role_arn=(
+                    f"arn:aws:iam::{roles.artifact}:role/mmc-{_ENV_TAG}-baseline-writer-placeholder"
+                ),
+                producer_bucket_arn=f"arn:aws:s3:::mmc-{_ENV_TAG}-training-snapshots-{roles.operations}",
+                analyser_image_uris=analyser_images,
+                vpc_id=accounts.operations_vpc_id,
+            ),
+            env=cdk.Environment(account=roles.operations, region=region),
+        )
+    return app
 
-app.synth()
+
+if __name__ == "__main__":
+    build_app(cdk.App()).synth()

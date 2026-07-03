@@ -94,7 +94,20 @@
             "PolicyName": "BaselineReaderPolicy"
           }
         ],
-        "RoleName": "mmc-test-baseline-reader-111111111111"
+        "Tags": [
+          {
+            "Key": "mmc:environment",
+            "Value": "test"
+          },
+          {
+            "Key": "mmc:reader-account",
+            "Value": "111111111111"
+          },
+          {
+            "Key": "mmc:role",
+            "Value": "baseline-reader"
+          }
+        ]
       },
       "Type": "AWS::IAM::Role"
     },
@@ -159,7 +172,20 @@
             "PolicyName": "BaselineReaderPolicy"
           }
         ],
-        "RoleName": "mmc-test-baseline-reader-222222222222"
+        "Tags": [
+          {
+            "Key": "mmc:environment",
+            "Value": "test"
+          },
+          {
+            "Key": "mmc:reader-account",
+            "Value": "222222222222"
+          },
+          {
+            "Key": "mmc:role",
+            "Value": "baseline-reader"
+          }
+        ]
       },
       "Type": "AWS::IAM::Role"
     },
@@ -230,7 +256,16 @@
             "PolicyName": "BaselineWriterPolicy"
           }
         ],
-        "RoleName": "mmc-test-baseline-writer"
+        "Tags": [
+          {
+            "Key": "mmc:environment",
+            "Value": "test"
+          },
+          {
+            "Key": "mmc:role",
+            "Value": "baseline-writer"
+          }
+        ]
       },
       "Type": "AWS::IAM::Role"
     }

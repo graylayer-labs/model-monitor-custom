@@ -21,6 +21,8 @@ SQUAD_BRIEF.md
 
 # CDK
 cdk.out/
+cdk/environments/accounts.yaml
+cdk/environments/projects.yaml
 
 # IDE
 .idea/
