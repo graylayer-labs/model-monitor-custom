@@ -18,11 +18,32 @@ def test_valid_env_parses():
     assert contract.input_uris == {"snapshot": "s3://bucket/in/snap.jsonl"}
 
 
-def test_missing_required_env_raises():
+REQUIRED_FIELDS = (
+    "PROJECT_NAME",
+    "RUN_ID",
+    "ANALYSER_TYPE",
+    "INPUT_URIS_JSON",
+    "OUTPUT_URI",
+    "CONFIG_URI",
+    "ENVIRONMENT",
+)
+
+
+@pytest.mark.parametrize("field", REQUIRED_FIELDS, ids=REQUIRED_FIELDS)
+def test_missing_required_env_raises(field: str) -> None:
+    """Each required field, dropped individually, must fail with a message naming it."""
     env = env_contract_valid()
-    env.pop("PROJECT_NAME")
-    with pytest.raises(ValidationError):
+    env.pop(field)
+    with pytest.raises(ValidationError, match=field):
         EnvContract.from_env(env)
+
+
+def test_extra_env_var_ignored_by_from_env() -> None:
+    """`from_env` filters to known keys — pin so a future refactor to pass-through is caught."""
+    env = env_contract_valid()
+    env["TOTALLY_UNRELATED"] = "x"
+    contract = EnvContract.from_env(env)
+    assert contract.PROJECT_NAME == "example-classifier"
 
 
 def test_extra_field_forbidden():
@@ -74,4 +95,11 @@ def test_bad_input_uris_json_rejected():
 def test_bad_input_uri_value_rejected():
     env = env_contract_valid(INPUT_URIS_JSON=json.dumps({"snap": "not-s3"}))
     with pytest.raises(ValidationError):
+        EnvContract.from_env(env)
+
+
+def test_input_uris_json_non_object_rejected():
+    """Valid JSON but not an object (e.g., a list) → ValidationError."""
+    env = env_contract_valid(INPUT_URIS_JSON=json.dumps(["s3://b/x"]))
+    with pytest.raises(ValidationError, match="INPUT_URIS_JSON"):
         EnvContract.from_env(env)
