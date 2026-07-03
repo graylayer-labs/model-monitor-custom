@@ -44,6 +44,19 @@ scripts/       local reproduce + parity helpers
 tests/         unit + integration + fixtures
 ```
 
+## Try it end-to-end
+
+Runnable local example under [`examples/adult-classifier/`](examples/adult-classifier/) — trains a
+small classifier on the UCI Adult fixture, drives every one of the five real analysers (bias,
+explain, DQ, MQ, shadow) against the resulting splits, and regenerates
+[`docs/e2e-output.md`](docs/e2e-output.md) with tables + plots. No AWS, no containers.
+
+```
+uv run python -m mmc_example_adult.run
+```
+
+![End-to-end DQ drift](examples/adult-classifier/outputs/plots/dq_drift_heatmap.png)
+
 ## Why this exists
 
 SageMaker Model Monitor + Clarify have proven brittle: opaque errors, undocumented input shapes, 1/sec `CreateProcessingJob` throttle, upstream OSS repo dormant. Every production ML monitoring stack in public writing (Netflix, Uber, Airbnb, Evidently, WhyLabs, Arize, Fiddler) uses **custom containers on own compute**. This repo is that pattern, standalone.

@@ -1,0 +1,35 @@
+[project]
+name = "mmc-example-adult"
+version = "0.1.0"
+description = "End-to-end example — train an Adult classifier, run all 5 analysers locally against fixtures."
+requires-python = ">=3.12"
+readme = "README.md"
+license = "Apache-2.0"
+dependencies = [
+    "mmc-base",
+    "mmc-analyser-bias",
+    "mmc-analyser-dq",
+    "mmc-analyser-explain",
+    "mmc-analyser-mq",
+    "mmc-analyser-shadow",
+    "scikit-learn>=1.5.0",
+    "pandas>=2.0",
+    "pyarrow>=17.0.0",
+    "matplotlib>=3.9.0",
+    "numpy>=1.26",
+]
+
+[tool.uv.sources]
+mmc-base = { workspace = true }
+mmc-analyser-bias = { workspace = true }
+mmc-analyser-dq = { workspace = true }
+mmc-analyser-explain = { workspace = true }
+mmc-analyser-mq = { workspace = true }
+mmc-analyser-shadow = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mmc_example_adult"]

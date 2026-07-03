@@ -1,0 +1,87 @@
+{
+  "generated_at_utc": "2026-07-03T09:50:25+00:00",
+  "runs": [
+    {
+      "analyser": "bias",
+      "outcome": "succeeded_with_violations",
+      "severity": "warn",
+      "violation_count": 2,
+      "plot": "examples/adult-classifier/outputs/plots/bias_pre_training.png",
+      "highlights": {
+        "facets": [
+          "sex",
+          "race"
+        ],
+        "sex/pre/DPL": 0.20476453424163865,
+        "race/pre/DPL": 0.13265564473251132
+      }
+    },
+    {
+      "analyser": "explain",
+      "outcome": "succeeded",
+      "severity": "info",
+      "violation_count": 0,
+      "plot": "examples/adult-classifier/outputs/plots/explain_shap_top_features.png",
+      "highlights": {
+        "top_features": [
+          "age",
+          "hours_per_week",
+          "age_x_hours"
+        ]
+      }
+    },
+    {
+      "analyser": "dq",
+      "outcome": "succeeded_with_violations",
+      "severity": "warn",
+      "violation_count": 2,
+      "plot": "examples/adult-classifier/outputs/plots/dq_drift_heatmap.png",
+      "highlights": {
+        "drifted_window": true,
+        "violations": 2,
+        "schema_diff": {
+          "missing": [],
+          "extra": []
+        }
+      }
+    },
+    {
+      "analyser": "dq_control",
+      "outcome": "succeeded",
+      "severity": "info",
+      "violation_count": 0,
+      "plot": null,
+      "highlights": {
+        "drifted_window": false,
+        "violations": 0,
+        "schema_diff": {
+          "missing": [],
+          "extra": []
+        }
+      }
+    },
+    {
+      "analyser": "mq",
+      "outcome": "succeeded_with_violations",
+      "severity": "alert",
+      "violation_count": 2,
+      "plot": "examples/adult-classifier/outputs/plots/mq_confusion_matrix.png",
+      "highlights": {
+        "accuracy": 0.7219017306544658,
+        "f1_macro": 0.6158830134574795,
+        "auc": 0.7294418272672409
+      }
+    },
+    {
+      "analyser": "shadow",
+      "outcome": "succeeded_with_violations",
+      "severity": "warn",
+      "violation_count": 1,
+      "plot": "examples/adult-classifier/outputs/plots/shadow_per_class_disagreement.png",
+      "highlights": {
+        "agreement": 0.808699688349579,
+        "js_divergence": 0.014822270818612935
+      }
+    }
+  ]
+}

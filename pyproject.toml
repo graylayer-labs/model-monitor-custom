@@ -18,10 +18,11 @@ dependencies = [
     "mmc-analyser-explain",
     "mmc-analyser-mq",
     "mmc-analyser-shadow",
+    "mmc-example-adult",
 ]
 
 [tool.uv.workspace]
-members = ["containers/baseline", "containers/base", "containers/bias", "containers/dq", "containers/explain", "containers/mq", "containers/shadow", "cdk"]
+members = ["containers/baseline", "containers/base", "containers/bias", "containers/dq", "containers/explain", "containers/mq", "containers/shadow", "cdk", "examples/adult-classifier"]
 
 [tool.uv.sources]
 model-baseline = { workspace = true }
@@ -32,6 +33,7 @@ mmc-analyser-dq = { workspace = true }
 mmc-analyser-explain = { workspace = true }
 mmc-analyser-mq = { workspace = true }
 mmc-analyser-shadow = { workspace = true }
+mmc-example-adult = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -42,6 +44,7 @@ dev = [
     "scikit-learn>=1.5.0",
     "pyarrow>=17.0.0",
     "boto3>=1.34.0",
+    "matplotlib>=3.9.0",
 ]
 
 [build-system]
