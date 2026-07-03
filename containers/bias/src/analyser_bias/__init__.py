@@ -1,7 +1,8 @@
-"""Bias analyser package — Phase 2 skeleton."""
+"""Bias analyser package — smclarify-backed implementation."""
 
 from __future__ import annotations
 
-from analyser_bias.analyser import NoopBiasAnalyser
+from analyser_bias.analyser import BiasAnalyser
+from analyser_bias.spec import BiasSpec, Facet
 
-__all__ = ["NoopBiasAnalyser"]
+__all__ = ["BiasAnalyser", "BiasSpec", "Facet"]

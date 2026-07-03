@@ -1,0 +1,15 @@
+{
+  "note": "Pre-training bias metrics on UCI Adult, facet=sex(Female), label=income(>50K). Values captured from smclarify 0.5 bias_report (library-level parity, not SageMaker service).",
+  "dataset": "adult.parquet",
+  "facet": {"name": "sex", "values": ["Female"]},
+  "label": {"name": "income", "positive_values": [">50K"]},
+  "pre_training_metrics": {
+    "CI": 0.3513692725946555,
+    "DPL": 0.20015891077100018,
+    "KL": 0.14306865156306434,
+    "JS": 0.03075614465977302,
+    "LP": 0.2830674462421746,
+    "TVD": 0.20015891077100015,
+    "KS": 0.20015891077100018
+  }
+}
