@@ -1,7 +1,8 @@
-"""Shadow analyser package — Phase 3.5 skeleton."""
+"""Shadow analyser package — serving-vs-shadow variant comparison."""
 
 from __future__ import annotations
 
-from analyser_shadow.analyser import NoopShadowAnalyser
+from analyser_shadow.analyser import ShadowAnalyser
+from analyser_shadow.spec import ShadowSpec
 
-__all__ = ["NoopShadowAnalyser"]
+__all__ = ["ShadowAnalyser", "ShadowSpec"]
