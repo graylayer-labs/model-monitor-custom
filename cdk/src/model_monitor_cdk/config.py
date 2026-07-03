@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     import aws_cdk as cdk
 
 _ACCOUNT_ID_PATTERN = re.compile(r"^\d{12}$")
+_S3_BUCKET_ARN_PATTERN = re.compile(r"^arn:aws:s3:::[a-z0-9][a-z0-9.-]*[a-z0-9]$")
 _DEFAULT_SCHEDULE = "cron(0 * * * ? *)"
 
 
@@ -122,6 +123,10 @@ class ProjectSpec(BaseModel):
         name: Project slug (used in stack IDs and tags).
         inference_account: 12-digit ID of the inference account this project
             runs in. Must appear in ``AccountsConfig.roles.inference``.
+        producer_bucket_arn: ARN of the S3 bucket owned by the producer team
+            that this project's training snapshots land in. Used by
+            :class:`OperationsBaselineStack` for read grants and the
+            EventBridge object-created rule.
         schedule: EventBridge Scheduler cron expression for the tick.
         vpc_id: Optional VPC ID for the inference stack to adopt.
             ``None`` → stack creates its own VPC.
@@ -131,10 +136,33 @@ class ProjectSpec(BaseModel):
 
     name: str = Field(min_length=1)
     inference_account: str
+    producer_bucket_arn: str
     schedule: str = _DEFAULT_SCHEDULE
     vpc_id: str | None = None
 
     _validate_inference_account = field_validator("inference_account", mode="before")(_validate_account_id)
+
+    @field_validator("producer_bucket_arn", mode="before")
+    @classmethod
+    def _validate_producer_bucket_arn(cls, value: object) -> str:
+        """Enforce non-empty S3 bucket ARN.
+
+        Args:
+            value: Raw ARN from YAML.
+
+        Returns:
+            The validated ARN string.
+
+        Raises:
+            ValueError: If ``value`` isn't a matching S3 bucket ARN.
+        """
+        if not isinstance(value, str) or not value:
+            msg = f"producer_bucket_arn must be a non-empty string, got: {value!r}"
+            raise ValueError(msg)
+        if not _S3_BUCKET_ARN_PATTERN.match(value):
+            msg = f"producer_bucket_arn must match arn:aws:s3:::<bucket>, got: {value!r}"
+            raise ValueError(msg)
+        return value
 
 
 class ProjectsConfig(BaseModel):

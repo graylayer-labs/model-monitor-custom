@@ -56,6 +56,7 @@ def build_app(app: cdk.App) -> cdk.App:
     roles = accounts.roles
     region = accounts.region
     analyser_images = _analyser_image_uris(artifact_account=roles.artifact, region=region)
+    writer_role_arn = f"arn:aws:iam::{roles.artifact}:role/mmc-{_ENV_TAG}-baseline-writer"
 
     artifact = ArtifactStack(
         app,
@@ -109,10 +110,8 @@ def build_app(app: cdk.App) -> cdk.App:
                 artifact_account_id=roles.artifact,
                 baselines_bucket_arn=artifact.baselines_bucket.bucket_arn,
                 artifact_kms_key_arn=artifact.kms_key.key_arn,
-                baseline_writer_role_arn=(
-                    f"arn:aws:iam::{roles.artifact}:role/mmc-{_ENV_TAG}-baseline-writer-placeholder"
-                ),
-                producer_bucket_arn=f"arn:aws:s3:::mmc-{_ENV_TAG}-training-snapshots-{roles.operations}",
+                baseline_writer_role_arn=writer_role_arn,
+                producer_bucket_arn=project.producer_bucket_arn,
                 analyser_image_uris=analyser_images,
                 vpc_id=accounts.operations_vpc_id,
             ),

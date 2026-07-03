@@ -256,6 +256,7 @@
             "PolicyName": "BaselineWriterPolicy"
           }
         ],
+        "RoleName": "mmc-test-baseline-writer",
         "Tags": [
           {
             "Key": "mmc:environment",

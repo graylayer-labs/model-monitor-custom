@@ -7,6 +7,10 @@ projects:
   - name: example-classifier
     # Must match one of the IDs under accounts.roles.inference.
     inference_account: "111111111111"
+    # Your training data bucket ARN, owned by the producer team. Object-created
+    # events in this bucket trigger the OperationsBaselineStack Step Function.
+    # Required — no default; the account that produces training data owns it.
+    producer_bucket_arn: "arn:aws:s3:::your-training-snapshots-bucket"
     # EventBridge Scheduler cron for the inference tick (default: hourly).
     schedule: "cron(0 * * * ? *)"
     # Optional. VPC ID for InferenceMonitorStack to adopt. Omit or null →

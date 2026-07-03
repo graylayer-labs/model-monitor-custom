@@ -63,6 +63,48 @@ SageMaker Model Monitor + Clarify have proven brittle: opaque errors, undocument
 
 Full evidence-backed case: [`docs/research/SM_MODEL_MONITOR_ASSESSMENT.md`](docs/research/SM_MODEL_MONITOR_ASSESSMENT.md).
 
+## First deploy
+
+Everything below assumes you have `aws`, `cdk`, `docker`, `uv`, and `git` on PATH,
+and an AWS profile with credentials for the artifact account.
+
+1. Copy the example configs and fill in real account IDs + producer bucket ARNs:
+
+   ```
+   cp cdk/environments/accounts.example.yaml cdk/environments/accounts.yaml
+   cp cdk/environments/projects.example.yaml cdk/environments/projects.yaml
+   $EDITOR cdk/environments/accounts.yaml cdk/environments/projects.yaml
+   ```
+
+2. Bootstrap every account the topology references (one-off per account/region):
+
+   ```
+   uv run cdk bootstrap --profile <artifact-profile> aws://<artifact-account>/eu-west-1
+   uv run cdk bootstrap --profile <operations-profile> aws://<operations-account>/eu-west-1
+   uv run cdk bootstrap --profile <inference-profile> aws://<inference-account>/eu-west-1
+   ```
+
+3. Deploy the artifact stack first (creates the ECR repos + baselines bucket + KMS key):
+
+   ```
+   uv run cdk deploy MMC-Test-Artifact --profile <artifact-profile>
+   ```
+
+4. Build + push the analyser container images to ECR:
+
+   ```
+   ./scripts/build-and-push-analysers.sh <artifact-account-id>
+   ```
+
+5. Deploy everything the topology declares. CDK filters stacks by account, so
+   `'*'` works from each profile:
+
+   ```
+   uv run cdk deploy '*' --profile <artifact-profile>
+   uv run cdk deploy '*' --profile <operations-profile>
+   uv run cdk deploy '*' --profile <inference-profile>
+   ```
+
 ## Contributing
 
 R&D repo. Draft PRs only. TDD required — RED test before production code. Full contributor checklist in [`docs/STANDARDS.md`](docs/STANDARDS.md).

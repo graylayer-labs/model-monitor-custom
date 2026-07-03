@@ -53,6 +53,7 @@ def _projects_payload(**overrides) -> dict:
     project = {
         "name": "example-classifier",
         "inference_account": "111111111111",
+        "producer_bucket_arn": "arn:aws:s3:::example-training-snapshots",
     }
     project.update(overrides)
     return {"projects": [project]}
@@ -96,8 +97,18 @@ def test_three_account_config_loads(tmp_path: Path) -> None:
     )
     projects_payload = {
         "projects": [
-            {"name": "p1", "inference_account": "333333333333", "vpc_id": "vpc-abc"},
-            {"name": "p2", "inference_account": "444444444444", "schedule": "cron(30 * * * ? *)"},
+            {
+                "name": "p1",
+                "inference_account": "333333333333",
+                "producer_bucket_arn": "arn:aws:s3:::p1-training",
+                "vpc_id": "vpc-abc",
+            },
+            {
+                "name": "p2",
+                "inference_account": "444444444444",
+                "producer_bucket_arn": "arn:aws:s3:::p2-training",
+                "schedule": "cron(30 * * * ? *)",
+            },
         ],
     }
     accounts_path = _write_yaml(tmp_path / "accounts.yaml", accounts)
@@ -151,7 +162,11 @@ def test_unknown_project_inference_account_rejected(tmp_path: Path) -> None:
     accounts_path = _write_yaml(tmp_path / "accounts.yaml", _accounts_payload())
     projects_payload = {
         "projects": [
-            {"name": "orphan", "inference_account": "999999999999"},
+            {
+                "name": "orphan",
+                "inference_account": "999999999999",
+                "producer_bucket_arn": "arn:aws:s3:::orphan-training",
+            },
         ],
     }
     projects_path = _write_yaml(tmp_path / "projects.yaml", projects_payload)
@@ -233,7 +248,13 @@ def test_construct_direct_from_dict() -> None:
                 },
             },
             "projects": {
-                "projects": [{"name": "p", "inference_account": "111111111111"}],
+                "projects": [
+                    {
+                        "name": "p",
+                        "inference_account": "111111111111",
+                        "producer_bucket_arn": "arn:aws:s3:::p-training",
+                    },
+                ],
             },
         },
     )
@@ -265,6 +286,46 @@ def test_resolve_env_from_context_missing_ctx() -> None:
     app = cdk.App()
     with pytest.raises(ValueError, match=r"accounts.*projects"):
         resolve_env_from_context(app)
+
+
+def test_producer_bucket_arn_valid_accepted(tmp_path: Path) -> None:
+    accounts_path = _write_yaml(tmp_path / "accounts.yaml", _accounts_payload())
+    projects_path = _write_yaml(
+        tmp_path / "projects.yaml",
+        _projects_payload(producer_bucket_arn="arn:aws:s3:::my-training-data.v2"),
+    )
+    cfg = load_env(accounts_path, projects_path)
+    assert cfg.projects.projects[0].producer_bucket_arn == "arn:aws:s3:::my-training-data.v2"
+
+
+def test_producer_bucket_arn_empty_rejected(tmp_path: Path) -> None:
+    accounts_path = _write_yaml(tmp_path / "accounts.yaml", _accounts_payload())
+    projects_path = _write_yaml(
+        tmp_path / "projects.yaml",
+        _projects_payload(producer_bucket_arn=""),
+    )
+    with pytest.raises(ValueError, match="producer_bucket_arn"):
+        load_env(accounts_path, projects_path)
+
+
+def test_producer_bucket_arn_non_arn_rejected(tmp_path: Path) -> None:
+    accounts_path = _write_yaml(tmp_path / "accounts.yaml", _accounts_payload())
+    projects_path = _write_yaml(
+        tmp_path / "projects.yaml",
+        _projects_payload(producer_bucket_arn="not-an-arn"),
+    )
+    with pytest.raises(ValueError, match="producer_bucket_arn"):
+        load_env(accounts_path, projects_path)
+
+
+def test_producer_bucket_arn_non_s3_rejected(tmp_path: Path) -> None:
+    accounts_path = _write_yaml(tmp_path / "accounts.yaml", _accounts_payload())
+    projects_path = _write_yaml(
+        tmp_path / "projects.yaml",
+        _projects_payload(producer_bucket_arn="arn:aws:sqs:eu-west-1:111111111111:q"),
+    )
+    with pytest.raises(ValueError, match="producer_bucket_arn"):
+        load_env(accounts_path, projects_path)
 
 
 def test_project_direct_validation_error() -> None:

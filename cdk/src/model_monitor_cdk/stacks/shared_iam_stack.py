@@ -136,6 +136,7 @@ class SharedIamStack(Stack):
         return iam.Role(
             self,
             "BaselineWriter",
+            role_name=f"mmc-{self._props.environment}-baseline-writer",
             assumed_by=iam.AccountPrincipal(self._props.writer_account_id),  # ty: ignore[invalid-argument-type]
             max_session_duration=Duration.hours(1),
             inline_policies={

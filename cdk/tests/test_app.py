@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
 import aws_cdk as cdk
 import yaml
+from aws_cdk.assertions import Template
 
 _APP_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_APP_DIR))
@@ -25,7 +27,11 @@ def _fixture_configs(tmp_path: Path) -> tuple[Path, Path]:
     }
     projects = {
         "projects": [
-            {"name": "example-classifier", "inference_account": "111111111111"},
+            {
+                "name": "example-classifier",
+                "inference_account": "111111111111",
+                "producer_bucket_arn": "arn:aws:s3:::example-training-snapshots",
+            },
         ],
     }
     a = tmp_path / "accounts.yaml"
@@ -70,8 +76,16 @@ def test_multi_project_multi_account(tmp_path: Path) -> None:
     }
     projects = {
         "projects": [
-            {"name": "p1", "inference_account": "333333333333"},
-            {"name": "p2", "inference_account": "444444444444"},
+            {
+                "name": "p1",
+                "inference_account": "333333333333",
+                "producer_bucket_arn": "arn:aws:s3:::p1-training",
+            },
+            {
+                "name": "p2",
+                "inference_account": "444444444444",
+                "producer_bucket_arn": "arn:aws:s3:::p2-training",
+            },
         ],
     }
     a = tmp_path / "a.yaml"
@@ -89,3 +103,42 @@ def test_multi_project_multi_account(tmp_path: Path) -> None:
     assert accounts_per_stack["MMC-Test-InferenceMonitor-p1"] == "333333333333"
     assert accounts_per_stack["MMC-Test-InferenceMonitor-p2"] == "444444444444"
     assert accounts_per_stack["MMC-Test-OperationsBaseline-p1"] == "222222222222"
+
+
+def test_producer_bucket_arn_flows_from_config(tmp_path: Path) -> None:
+    """Per-project producer_bucket_arn must land inside the OperationsBaselineStack synth."""
+    accounts_path, projects_path = _fixture_configs(tmp_path)
+    app = cdk.App(
+        context={
+            "accounts": str(accounts_path),
+            "projects": str(projects_path),
+        },
+    )
+    build_app(app)
+    ops = next(
+        c
+        for c in app.node.children
+        if isinstance(c, cdk.Stack) and c.node.id == "MMC-Test-OperationsBaseline-example-classifier"
+    )
+    rendered = json.dumps(Template.from_stack(ops).to_json())
+    assert "example-training-snapshots" in rendered
+
+
+def test_writer_role_arn_flows_from_shared_iam_name(tmp_path: Path) -> None:
+    """Ops stack must reference the deterministic writer role ARN from artifact account."""
+    accounts_path, projects_path = _fixture_configs(tmp_path)
+    app = cdk.App(
+        context={
+            "accounts": str(accounts_path),
+            "projects": str(projects_path),
+        },
+    )
+    build_app(app)
+    ops = next(
+        c
+        for c in app.node.children
+        if isinstance(c, cdk.Stack) and c.node.id == "MMC-Test-OperationsBaseline-example-classifier"
+    )
+    rendered = json.dumps(Template.from_stack(ops).to_json())
+    assert "arn:aws:iam::111111111111:role/mmc-test-baseline-writer" in rendered
+    assert "placeholder" not in rendered
