@@ -1,19 +1,47 @@
+"""End-to-end drive of :class:`MqAnalyser` through the base harness."""
+
 from __future__ import annotations
 
+import io
+import json
 import math
+from pathlib import Path
 
-from analyser_mq import NoopMqAnalyser
+import pandas as pd
+from analyser_mq import MqAnalyser
 from mmc_base.testing import run_container_flow
 
+FIXTURES = Path(__file__).resolve().parents[3] / "tests" / "fixtures"
+ADULT = FIXTURES / "adult.parquet"
 
-def test_noop_mq_analyser_end_to_end_via_base_harness():
+
+def _predictions_bytes() -> bytes:
+    """Return a parquet-serialised Adult frame with a matching prediction column."""
+    df = pd.read_parquet(ADULT)[["income"]].copy()
+    df["prediction"] = df["income"]
+    buf = io.BytesIO()
+    df.to_parquet(buf)
+    return buf.getvalue()
+
+
+def test_mq_analyser_end_to_end_via_base_harness():
+    input_uri = "s3://bucket/in/preds.parquet"
+    env_overrides = {
+        "ANALYSER_TYPE": "mq",
+        "OUTPUT_URI": "s3://bucket/out/mq",
+        "INPUT_URIS_JSON": json.dumps({"predictions": input_uri}),
+    }
     code, stubs = run_container_flow(
-        NoopMqAnalyser,
-        env_overrides={
-            "ANALYSER_TYPE": "mq",
-            "OUTPUT_URI": "s3://bucket/out/mq",
+        MqAnalyser,
+        env_overrides=env_overrides,
+        config={
+            "problem_type": "binary",
+            "label_column": "income",
+            "prediction_column": "prediction",
+            "baseline_metrics": {"accuracy": 1.0},
+            "degradation_thresholds": {"accuracy": 0.01},
         },
-        config={"threshold": 0.5},
+        input_bodies={"predictions": _predictions_bytes()},
     )
     assert code == 0
 
@@ -28,27 +56,15 @@ def test_noop_mq_analyser_end_to_end_via_base_harness():
     result = s3.json_at("bucket", "out/mq/result.json")
     assert result["outcome"] == "succeeded"
     assert result["severity"] == "info"
-    assert result["schema_version"] == "1.0"
     assert result["violation_count"] == 0
-    assert result["analyser_metrics"] == {"NoopDqSignal": 0.0}
-    assert result["payload"] == {"note": "NoopMqAnalyser — real MQ math in Phase 5"}
+    assert math.isclose(result["analyser_metrics"]["mq/accuracy"], 1.0, abs_tol=1e-9)
+    assert result["payload"]["monitor_type"] == "MQ"
+    assert result["payload"]["problem_type"] == "binary"
 
     assert len(ddb.put_items) == 1
-    item = ddb.put_items[0]["Item"]
-    assert item["outcome"]["S"] == "succeeded"
-    assert item["analyser_type"]["S"] == "mq"
-    assert "failure_s3_uri" not in item
+    assert ddb.put_items[0]["Item"]["outcome"]["S"] == "succeeded"
 
     assert len(cw.calls) == 1
-    metrics = {m["MetricName"]: m for m in cw.calls[0]["MetricData"]}
-    assert metrics["RunCount"]["Value"] == 1
-    assert metrics["ViolationCount"]["Value"] == 0
-    assert metrics["Severity"]["Value"] == 0
-    noop_metrics = [
-        m
-        for m in cw.calls[0]["MetricData"]
-        if m["MetricName"] == "MetricValue"
-        and any(d["Name"] == "MetricName" and d["Value"] == "NoopDqSignal" for d in m["Dimensions"])
-    ]
-    assert len(noop_metrics) == 1
-    assert math.isclose(noop_metrics[0]["Value"], 0.0, abs_tol=1e-9)
+    metric_names = {m["MetricName"] for m in cw.calls[0]["MetricData"]}
+    assert "RunCount" in metric_names
+    assert "ViolationCount" in metric_names

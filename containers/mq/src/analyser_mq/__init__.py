@@ -1,7 +1,7 @@
-"""MQ analyser package — Phase 3.4 skeleton."""
+"""MQ analyser package."""
 
 from __future__ import annotations
 
-from analyser_mq.analyser import NoopMqAnalyser
+from analyser_mq.analyser import MqAnalyser
 
-__all__ = ["NoopMqAnalyser"]
+__all__ = ["MqAnalyser"]
