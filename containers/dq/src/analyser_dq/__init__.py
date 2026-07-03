@@ -1,7 +1,8 @@
-"""DQ analyser package — Phase 2 skeleton."""
+"""DQ analyser package."""
 
 from __future__ import annotations
 
-from analyser_dq.analyser import NoopDqAnalyser
+from analyser_dq.analyser import DqAnalyser
+from analyser_dq.spec import DqSpec
 
-__all__ = ["NoopDqAnalyser"]
+__all__ = ["DqAnalyser", "DqSpec"]

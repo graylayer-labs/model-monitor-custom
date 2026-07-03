@@ -1,12 +1,16 @@
 [project]
 name = "mmc-analyser-dq"
 version = "0.1.0"
-description = "Data-quality analyser image — Phase 2 skeleton with NoopDqAnalyser. Real math lands in Phase 5."
+description = "Data-quality analyser image — schema, completeness, and distribution drift vs a baseline snapshot."
 requires-python = ">=3.12"
 readme = "README.md"
 license = "Apache-2.0"
 dependencies = [
     "mmc-base",
+    "numpy",
+    "pandas",
+    "pyarrow",
+    "scipy",
 ]
 
 [tool.uv.sources]
