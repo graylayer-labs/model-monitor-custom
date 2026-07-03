@@ -15,12 +15,13 @@ dependencies = [
     "mmc-base",
     "mmc-analyser-bias",
     "mmc-analyser-dq",
+    "mmc-analyser-explain",
     "mmc-analyser-mq",
     "mmc-analyser-shadow",
 ]
 
 [tool.uv.workspace]
-members = ["containers/baseline", "containers/base", "containers/bias", "containers/dq", "containers/mq", "containers/shadow", "cdk"]
+members = ["containers/baseline", "containers/base", "containers/bias", "containers/dq", "containers/explain", "containers/mq", "containers/shadow", "cdk"]
 
 [tool.uv.sources]
 model-baseline = { workspace = true }
@@ -28,6 +29,7 @@ model-monitor-cdk = { workspace = true }
 mmc-base = { workspace = true }
 mmc-analyser-bias = { workspace = true }
 mmc-analyser-dq = { workspace = true }
+mmc-analyser-explain = { workspace = true }
 mmc-analyser-mq = { workspace = true }
 mmc-analyser-shadow = { workspace = true }
 
