@@ -217,6 +217,73 @@ def test_no_hardcoded_account_ids_in_source():
     assert not hits, f"Hardcoded 12-digit account IDs in source: {hits}"
 
 
+def test_task_role_policy_grants_kms_decrypt_on_artifact_key():
+    """Each baseline task role must decrypt objects encrypted by the artifact KMS key."""
+    template = _synth()
+    key_arn = f"arn:aws:kms:eu-west-1:{_ARTIFACT_ACCOUNT}:key/abcd1234"
+    for analyser in _ANALYSERS:
+        template.has_resource_properties(
+            "AWS::IAM::Policy",
+            {
+                "PolicyDocument": {
+                    "Statement": Match.array_with(
+                        [
+                            Match.object_like(
+                                {
+                                    "Action": "kms:Decrypt",
+                                    "Effect": "Allow",
+                                    "Resource": key_arn,
+                                },
+                            ),
+                        ],
+                    ),
+                },
+                "Roles": Match.array_with(
+                    [{"Ref": Match.string_like_regexp(f"TaskRole{analyser.title()}.*")}],
+                ),
+            },
+        )
+
+
+def _flatten_definition_for_parse(defn: Any) -> str:
+    """Like ``_flatten_definition`` but substitute CFN tokens with a placeholder so JSON parses."""
+    if isinstance(defn, str):
+        return defn
+    if isinstance(defn, dict):
+        join = defn.get("Fn::Join")
+        if join:
+            _, parts = join
+            return "".join(_flatten_definition_for_parse(p) for p in parts)
+        return "__TOKEN__"
+    if isinstance(defn, list):
+        return "".join(_flatten_definition_for_parse(p) for p in defn)
+    return str(defn)
+
+
+def test_each_parallel_branch_catches_to_distinct_failure_state():
+    """Per-branch Catch must route to its own failure state, not a shared terminal."""
+    template = _synth()
+    sms = template.find_resources("AWS::StepFunctions::StateMachine")
+    props = next(iter(sms.values()))["Properties"]
+    raw = props.get("DefinitionString") or props.get("DefinitionBody")
+    definition = json.loads(_flatten_definition_for_parse(raw))
+    branches = definition["States"]["AllAnalysers"]["Branches"]
+    assert len(branches) == 5
+    catch_targets: list[str] = []
+    for branch in branches:
+        run_state_name = branch["StartAt"]
+        run_state = branch["States"][run_state_name]
+        catches = run_state["Catch"]
+        assert len(catches) == 1, f"branch {run_state_name} should have exactly one Catch"
+        target = catches[0]["Next"]
+        assert target in branch["States"], f"Catch target {target!r} not in same branch"
+        assert branch["States"][target]["Type"] == "Pass"
+        catch_targets.append(target)
+    assert len(set(catch_targets)) == 5, f"Catch targets not distinct: {catch_targets}"
+    expected = {f"Branch{a.title()}Failed" for a in _ANALYSERS}
+    assert set(catch_targets) == expected
+
+
 def test_snapshot(snapshot_check):
     template = _synth()
     snapshot_check("operations_baseline_stack", template.to_json())

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 import pytest
@@ -12,6 +13,24 @@ from model_monitor_cdk.stacks.inference_monitor_stack import (
     InferenceMonitorStack,
     InferenceMonitorStackProps,
 )
+
+_SCHEDULER_EXPR_RE = re.compile(
+    r"^(cron\(\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\)"
+    r"|rate\(\d+\s+(minute|minutes|hour|hours|day|days)\)"
+    r"|at\(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\))$",
+)
+
+
+def _is_valid_scheduler_expression(expr: str) -> bool:
+    """Client-side EventBridge Scheduler expression syntax check.
+
+    Scheduler cron takes 6 fields (minute hour day-of-month month day-of-week year),
+    not the 5-field Unix cron. Rate accepts ``rate(N unit)`` and at accepts an ISO8601
+    instant. See:
+    https://docs.aws.amazon.com/scheduler/latest/UserGuide/schedule-types.html
+    """
+    return bool(_SCHEDULER_EXPR_RE.match(expr))
+
 
 _ANALYSERS = ("mq", "dq", "bias", "explain", "shadow")
 _CONSUMER_ACCOUNT = "111111111111"
@@ -186,3 +205,124 @@ def test_archive_bucket_created():
     template = _synth()
     buckets = template.find_resources("AWS::S3::Bucket")
     assert len(buckets) >= 1
+
+
+def test_scheduler_expression_regex_accepts_valid_and_rejects_invalid():
+    """Validator itself: accept Scheduler-legal shapes, reject 5-field cron."""
+    valid = [
+        "cron(0 * * * ? *)",
+        "cron(0 12 ? * MON-FRI *)",
+        "rate(5 minutes)",
+        "rate(1 hour)",
+    ]
+    invalid = [
+        "cron(0 * * * *)",  # 5-field Unix cron — Scheduler rejects
+        "cron(0 * * * ?)",  # 5 fields
+        "rate(5 seconds)",  # seconds not supported
+        "rate(minutes)",  # missing count
+        "every 5 minutes",  # freeform
+        "",
+    ]
+    for expr in valid:
+        assert _is_valid_scheduler_expression(expr), f"expected valid: {expr!r}"
+    for expr in invalid:
+        assert not _is_valid_scheduler_expression(expr), f"expected invalid: {expr!r}"
+
+
+def test_scheduler_schedule_expression_is_valid():
+    """Rendered ScheduleExpression must be syntactically valid Scheduler cron/rate."""
+    template = _synth()
+    schedules = template.find_resources("AWS::Scheduler::Schedule")
+    assert len(schedules) == 1
+    expr = next(iter(schedules.values()))["Properties"]["ScheduleExpression"]
+    assert _is_valid_scheduler_expression(expr), f"invalid Scheduler expression: {expr!r}"
+
+
+def test_scheduler_rejects_five_field_cron_at_synth_time_via_validator():
+    """Guard against the silent-typo class: 5-field Unix cron slipping through props."""
+    props = _valid_props(schedule_expression="cron(0 * * * *)")
+    app = App()
+    stack = InferenceMonitorStack(
+        app,
+        "MMC-Test-InferenceMonitor-BadCron",
+        props=props,
+        env=Environment(account=_CONSUMER_ACCOUNT, region="eu-west-1"),
+    )
+    template = Template.from_stack(stack)
+    expr = next(iter(template.find_resources("AWS::Scheduler::Schedule").values()))["Properties"]["ScheduleExpression"]
+    assert not _is_valid_scheduler_expression(expr), (
+        "Validator failed to catch 5-field Unix cron — Scheduler would silently reject at deploy."
+    )
+
+
+def test_task_role_policy_grants_kms_decrypt_on_artifact_key():
+    """Each Fargate task role must be able to decrypt objects encrypted by the artifact KMS key."""
+    template = _synth()
+    key_arn = f"arn:aws:kms:eu-west-1:{_ARTIFACT_ACCOUNT}:key/abcd1234"
+    for analyser in _ANALYSERS:
+        template.has_resource_properties(
+            "AWS::IAM::Policy",
+            {
+                "PolicyDocument": {
+                    "Statement": Match.array_with(
+                        [
+                            Match.object_like(
+                                {
+                                    "Action": "kms:Decrypt",
+                                    "Effect": "Allow",
+                                    "Resource": key_arn,
+                                },
+                            ),
+                        ],
+                    ),
+                },
+                "Roles": Match.array_with(
+                    [{"Ref": Match.string_like_regexp(f"TaskRole{analyser.title()}.*")}],
+                ),
+            },
+        )
+
+
+def _flatten_definition_for_parse(defn: Any) -> str:
+    """Like ``_flatten_definition`` but substitutes CFN tokens with a placeholder token.
+
+    The raw ``_flatten_definition`` dumps intrinsic dicts as JSON, which corrupts
+    the surrounding string (they land inside a JSON string literal). For JSON
+    parsing of the ASL definition, replace the intrinsic with a bare placeholder.
+    """
+    if isinstance(defn, str):
+        return defn
+    if isinstance(defn, dict):
+        join = defn.get("Fn::Join")
+        if join:
+            _, parts = join
+            return "".join(_flatten_definition_for_parse(p) for p in parts)
+        return "__TOKEN__"
+    if isinstance(defn, list):
+        return "".join(_flatten_definition_for_parse(p) for p in defn)
+    return str(defn)
+
+
+def test_each_parallel_branch_catches_to_distinct_failure_state():
+    """Per-branch Catch must route to its own failure state, not a shared terminal."""
+    template = _synth()
+    sms = template.find_resources("AWS::StepFunctions::StateMachine")
+    raw = next(iter(sms.values()))["Properties"].get("DefinitionString") or next(iter(sms.values()))["Properties"].get(
+        "DefinitionBody"
+    )
+    definition = json.loads(_flatten_definition_for_parse(raw))
+    branches = definition["States"]["AllAnalysers"]["Branches"]
+    assert len(branches) == 5
+    catch_targets: list[str] = []
+    for branch in branches:
+        run_state_name = branch["StartAt"]
+        run_state = branch["States"][run_state_name]
+        catches = run_state["Catch"]
+        assert len(catches) == 1, f"branch {run_state_name} should have exactly one Catch"
+        target = catches[0]["Next"]
+        assert target in branch["States"], f"Catch target {target!r} not in same branch"
+        assert branch["States"][target]["Type"] == "Pass"
+        catch_targets.append(target)
+    assert len(set(catch_targets)) == 5, f"Catch targets not distinct: {catch_targets}"
+    expected = {f"Branch{a.title()}Failed" for a in _ANALYSERS}
+    assert set(catch_targets) == expected
