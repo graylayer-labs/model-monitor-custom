@@ -5,6 +5,10 @@ from model_monitor_cdk.stacks.inference_monitor_stack import (
     InferenceMonitorStack,
     InferenceMonitorStackProps,
 )
+from model_monitor_cdk.stacks.operations_baseline_stack import (
+    OperationsBaselineStack,
+    OperationsBaselineStackProps,
+)
 from model_monitor_cdk.stacks.shared_iam_stack import SharedIamStack, SharedIamStackProps
 
 __all__ = [
@@ -12,6 +16,8 @@ __all__ = [
     "ArtifactStackProps",
     "InferenceMonitorStack",
     "InferenceMonitorStackProps",
+    "OperationsBaselineStack",
+    "OperationsBaselineStackProps",
     "SharedIamStack",
     "SharedIamStackProps",
 ]

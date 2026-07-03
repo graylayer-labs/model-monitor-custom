@@ -1,0 +1,505 @@
+"""OperationsBaselineStack — snapshot analyser runtime in the ml-operations account.
+
+Mirrors :class:`InferenceMonitorStack` for the offline baseline path: an S3
+``Object Created`` event on the producer prefix starts a Step Functions
+Standard state machine whose top-level ``Parallel`` fans out over the five
+analyser branches on ECS Fargate. Each branch writes its snapshot artifact
+to the baselines bucket in ``ml-artifact`` by assuming the writer role from
+:class:`SharedIamStack` (per ADR 008) — no direct cross-account bucket
+grants. No DDB and no Pipes: snapshots are point-in-time file artifacts,
+not a live changelog.
+
+See ADR ``001-iac-layout`` (stack layout), ADR ``006-observability-contract``
+(CW namespace, log group naming), ADR ``007-failure-taxonomy`` (per-branch
+Retry/Catch), and ADR ``008-baseline-iam-boundary`` (assume-role writer).
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from dataclasses import dataclass, field
+from typing import Any, ClassVar, Literal
+
+from aws_cdk import (
+    CfnOutput,
+    Duration,
+    RemovalPolicy,
+    Stack,
+    Tags,
+)
+from aws_cdk import (
+    aws_ec2 as ec2,
+)
+from aws_cdk import (
+    aws_ecs as ecs,
+)
+from aws_cdk import (
+    aws_events as events,
+)
+from aws_cdk import (
+    aws_events_targets as events_targets,
+)
+from aws_cdk import (
+    aws_iam as iam,
+)
+from aws_cdk import (
+    aws_kms as kms,
+)
+from aws_cdk import (
+    aws_logs as logs,
+)
+from aws_cdk import (
+    aws_s3 as s3,
+)
+from aws_cdk import (
+    aws_stepfunctions as sfn,
+)
+from constructs import Construct
+
+_ECR_PATTERN = re.compile(r"^\d{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/[^\s:]+:[^\s]+$")
+_ACCOUNT_ID_PATTERN = re.compile(r"^\d{12}$")
+
+_ANALYSER_TYPES: tuple[str, ...] = ("mq", "dq", "bias", "explain", "shadow")
+
+_ANALYSER_MODULES: dict[str, str] = {
+    "mq": "analyser_mq.analyser:MqAnalyser",
+    "dq": "analyser_dq.analyser:DqAnalyser",
+    "bias": "analyser_bias.analyser:BiasAnalyser",
+    "explain": "analyser_explain.analyser:ExplainAnalyser",
+    "shadow": "analyser_shadow.analyser:ShadowAnalyser",
+}
+
+
+def _bucket_name_from_arn(bucket_arn: str) -> str:
+    """Extract bucket name from an ``arn:aws:s3:::<name>[/<prefix>]`` ARN.
+
+    Returns:
+        The bucket name (segment after ``arn:aws:s3:::`` and before any ``/``).
+
+    Raises:
+        ValueError: If the ARN is malformed.
+    """
+    prefix = "arn:aws:s3:::"
+    if not bucket_arn.startswith(prefix):
+        msg = f"expected an s3 bucket ARN, got: {bucket_arn!r}"
+        raise ValueError(msg)
+    tail = bucket_arn[len(prefix) :]
+    return tail.split("/", 1)[0]
+
+
+@dataclass(frozen=True, kw_only=True)
+class OperationsBaselineStackProps:
+    """Configuration for :class:`OperationsBaselineStack`.
+
+    Attributes:
+        environment: Deployment environment tag (``test``/``prod``/``dev``).
+        project_name: Model / silo id used in naming and tags.
+        operations_account_id: 12-digit id of the ml-operations account.
+        artifact_account_id: 12-digit id of the ml-artifact account.
+        baselines_bucket_arn: Cross-account write target (in ml-artifact).
+        artifact_kms_key_arn: Cross-account KMS key ARN (baselines bucket).
+        baseline_writer_role_arn: SharedIamStack writer role; the SFN task
+            role assumes this for the cross-account write.
+        producer_bucket_arn: Producer bucket ARN (training snapshots, local
+            to ml-operations).
+        producer_prefix: S3 key prefix for the ``Object Created`` filter.
+        analyser_image_uris: ECR URIs keyed by analyser type
+            (``mq``/``dq``/``bias``/``explain``/``shadow``).
+        fargate_cpu: vCPU units for each analyser task.
+        fargate_memory_mib: Memory (MiB) for each analyser task.
+        sfn_retry_max_attempts: Max retries per Parallel branch.
+        sfn_retry_backoff_seconds: IntervalSeconds seed for exponential backoff.
+    """
+
+    _REQUIRED_ANALYSERS: ClassVar[frozenset[str]] = frozenset(_ANALYSER_TYPES)
+
+    environment: Literal["test", "prod", "dev"]
+    project_name: str
+    operations_account_id: str
+    artifact_account_id: str
+    baselines_bucket_arn: str
+    artifact_kms_key_arn: str
+    baseline_writer_role_arn: str
+    producer_bucket_arn: str
+    producer_prefix: str = "training-snapshots/"
+    analyser_image_uris: dict[str, str] = field(default_factory=dict)
+    fargate_cpu: int = 1024
+    fargate_memory_mib: int = 4096
+    sfn_retry_max_attempts: int = 3
+    sfn_retry_backoff_seconds: int = 30
+
+    def __post_init__(self) -> None:
+        """Validate props at construction."""
+        self._validate_identifiers()
+        self._validate_images()
+        self._validate_numeric()
+
+    def _validate_identifiers(self) -> None:
+        """Check names, account IDs, and ARNs.
+
+        Raises:
+            ValueError: If any identifier is empty or malformed.
+        """
+        if not self.project_name:
+            msg = "project_name must be a non-empty string"
+            raise ValueError(msg)
+        if not _ACCOUNT_ID_PATTERN.match(self.operations_account_id):
+            msg = f"operations_account_id must be 12 digits, got: {self.operations_account_id!r}"
+            raise ValueError(msg)
+        if not _ACCOUNT_ID_PATTERN.match(self.artifact_account_id):
+            msg = f"artifact_account_id must be 12 digits, got: {self.artifact_account_id!r}"
+            raise ValueError(msg)
+        if not self.baselines_bucket_arn:
+            msg = "baselines_bucket_arn must be non-empty"
+            raise ValueError(msg)
+        if not self.artifact_kms_key_arn:
+            msg = "artifact_kms_key_arn must be non-empty"
+            raise ValueError(msg)
+        if not self.baseline_writer_role_arn:
+            msg = "baseline_writer_role_arn must be non-empty"
+            raise ValueError(msg)
+        if not self.producer_bucket_arn:
+            msg = "producer_bucket_arn must be non-empty"
+            raise ValueError(msg)
+        if not self.producer_prefix:
+            msg = "producer_prefix must be non-empty"
+            raise ValueError(msg)
+
+    def _validate_images(self) -> None:
+        """Check that every analyser has a well-formed ECR URI.
+
+        Raises:
+            ValueError: If keys are missing/extra or a URI isn't an ECR URI.
+        """
+        missing = self._REQUIRED_ANALYSERS - set(self.analyser_image_uris)
+        if missing:
+            msg = f"analyser_image_uris missing keys: {sorted(missing)}"
+            raise ValueError(msg)
+        for key, uri in self.analyser_image_uris.items():
+            if key not in self._REQUIRED_ANALYSERS:
+                msg = f"analyser_image_uris has unexpected key {key!r}"
+                raise ValueError(msg)
+            if not _ECR_PATTERN.match(uri):
+                msg = f"analyser_image_uris[{key!r}] must be an ECR URI, got: {uri!r}"
+                raise ValueError(msg)
+
+    def _validate_numeric(self) -> None:
+        """Check tunables are strictly positive (or non-negative for retries).
+
+        Raises:
+            ValueError: If any numeric prop is out of range.
+        """
+        if self.fargate_cpu <= 0:
+            msg = "fargate_cpu must be positive"
+            raise ValueError(msg)
+        if self.fargate_memory_mib <= 0:
+            msg = "fargate_memory_mib must be positive"
+            raise ValueError(msg)
+        if self.sfn_retry_max_attempts < 0:
+            msg = "sfn_retry_max_attempts must be non-negative"
+            raise ValueError(msg)
+        if self.sfn_retry_backoff_seconds <= 0:
+            msg = "sfn_retry_backoff_seconds must be positive"
+            raise ValueError(msg)
+
+
+class OperationsBaselineStack(Stack):
+    """Snapshot analyser runtime; deploys once per project in ``ml-operations``."""
+
+    def __init__(
+        self,
+        scope: Construct,
+        construct_id: str,
+        *,
+        props: OperationsBaselineStackProps,
+        **kwargs: Any,  # noqa: ANN401
+    ) -> None:
+        """Wire the snapshot analyser runtime.
+
+        Args:
+            scope: Parent construct.
+            construct_id: CDK construct id.
+            props: Validated configuration.
+            **kwargs: Passed through to :class:`aws_cdk.Stack`.
+        """
+        super().__init__(scope, construct_id, **kwargs)
+        self._props = props
+
+        Tags.of(self).add("Component", "baseline")
+        Tags.of(self).add("Project", props.project_name)
+        Tags.of(self).add("Environment", props.environment)
+
+        env = props.environment
+
+        kms_key = kms.Key.from_key_arn(self, "ArtifactKmsKey", key_arn=props.artifact_kms_key_arn)
+        producer_bucket = s3.Bucket.from_bucket_arn(
+            self,
+            "ProducerBucket",
+            bucket_arn=props.producer_bucket_arn,
+        )
+
+        vpc = ec2.Vpc(self, "AnalyserVpc", max_azs=2, nat_gateways=0)
+        cluster = ecs.Cluster(
+            self,
+            "AnalyserCluster",
+            cluster_name=f"mmc-{env}-baseline",
+            vpc=vpc,
+            enable_fargate_capacity_providers=True,
+        )
+
+        log_groups = self._build_log_groups(env)
+        task_defs = self._build_task_definitions(
+            env=env,
+            producer_bucket=producer_bucket,
+            kms_key=kms_key,
+            log_groups=log_groups,
+        )
+
+        state_machine = self._build_state_machine(env=env, task_defs=task_defs, cluster=cluster)
+
+        rule = self._build_event_rule(env=env, state_machine=state_machine)
+
+        CfnOutput(self, "StateMachineArn", value=state_machine.state_machine_arn)
+        CfnOutput(self, "EventRuleArn", value=rule.rule_arn)
+        for analyser, lg in log_groups.items():
+            CfnOutput(self, f"LogGroup{analyser.title()}Name", value=lg.log_group_name)
+
+    def _build_log_groups(self, env: str) -> dict[str, logs.LogGroup]:
+        """Create ``/mmc/<env>/baseline-<analyser>`` log groups per ADR 006.
+
+        Returns:
+            Log group keyed by analyser type.
+        """
+        return {
+            analyser: logs.LogGroup(
+                self,
+                f"LogGroup{analyser.title()}",
+                log_group_name=f"/mmc/{env}/baseline-{analyser}",
+                retention=logs.RetentionDays.ONE_MONTH,
+                removal_policy=RemovalPolicy.DESTROY,
+            )
+            for analyser in _ANALYSER_TYPES
+        }
+
+    def _build_task_definitions(
+        self,
+        *,
+        env: str,
+        producer_bucket: s3.IBucket,
+        kms_key: kms.IKey,
+        log_groups: dict[str, logs.LogGroup],
+    ) -> dict[str, ecs.FargateTaskDefinition]:
+        """One Fargate task definition per analyser, with a least-privilege task role.
+
+        Cross-account write is via ``sts:AssumeRole`` on
+        ``baseline_writer_role_arn`` — the task role never gets direct
+        ``s3:PutObject`` on the baselines bucket (ADR 008 boundary).
+
+        Returns:
+            Task definition keyed by analyser type.
+        """
+        props = self._props
+        defs: dict[str, ecs.FargateTaskDefinition] = {}
+        for analyser in _ANALYSER_TYPES:
+            task_role = iam.Role(
+                self,
+                f"TaskRole{analyser.title()}",
+                assumed_by=iam.ServicePrincipal("ecs-tasks.amazonaws.com"),  # ty: ignore[invalid-argument-type]
+                description=f"Fargate task role for mmc baseline-{analyser} analyser",
+            )
+            producer_bucket.grant_read(task_role, f"{props.producer_prefix}*")
+            task_role.add_to_principal_policy(
+                iam.PolicyStatement(
+                    sid="AssumeBaselineWriter",
+                    actions=["sts:AssumeRole"],
+                    resources=[props.baseline_writer_role_arn],
+                ),
+            )
+            kms_key.grant_decrypt(task_role)
+            task_role.add_to_principal_policy(
+                iam.PolicyStatement(
+                    actions=["cloudwatch:PutMetricData"],
+                    resources=["*"],
+                    conditions={"StringEquals": {"cloudwatch:namespace": "mmc/analyser/v1"}},
+                ),
+            )
+
+            task_def = ecs.FargateTaskDefinition(
+                self,
+                f"TaskDef{analyser.title()}",
+                cpu=props.fargate_cpu,
+                memory_limit_mib=props.fargate_memory_mib,
+                task_role=task_role,  # ty: ignore[invalid-argument-type]
+                family=f"mmc-{env}-baseline-{analyser}",
+            )
+            task_def.add_container(
+                f"Container{analyser.title()}",
+                image=ecs.ContainerImage.from_registry(props.analyser_image_uris[analyser]),
+                logging=ecs.LogDriver.aws_logs(
+                    stream_prefix=f"baseline-{analyser}",
+                    log_group=log_groups[analyser],
+                ),
+                environment={
+                    "PROJECT_NAME": props.project_name,
+                    "ANALYSER_TYPE": f"baseline-{analyser}",
+                    "ENVIRONMENT": env,
+                    "VARIANT": "Baseline",
+                    "BASELINE_WRITER_ROLE_ARN": props.baseline_writer_role_arn,
+                    "BASELINES_BUCKET_ARN": props.baselines_bucket_arn,
+                    "MMC_ANALYSER_MODULE": _ANALYSER_MODULES[analyser],
+                },
+            )
+            defs[analyser] = task_def
+        return defs
+
+    def _build_state_machine(
+        self,
+        *,
+        env: str,
+        task_defs: dict[str, ecs.FargateTaskDefinition],
+        cluster: ecs.ICluster,
+    ) -> sfn.StateMachine:
+        """SFN Standard with a Parallel of five per-analyser branches.
+
+        Same per-branch Retry + Catch semantics as InferenceMonitorStack
+        (ADR 007) — one analyser failure does not fail the whole snapshot.
+
+        Returns:
+            The created state machine.
+        """
+        props = self._props
+        branches: list[dict[str, Any]] = [
+            self._branch_definition(analyser=analyser, task_def=task_def, cluster=cluster)
+            for analyser, task_def in task_defs.items()
+        ]
+        parallel_state = {
+            "Type": "Parallel",
+            "End": True,
+            "Branches": branches,
+        }
+        definition = {
+            "Comment": f"mmc-{env}-{props.project_name}-baseline",
+            "StartAt": "AllAnalysers",
+            "States": {"AllAnalysers": parallel_state},
+        }
+        return sfn.StateMachine(
+            self,
+            "BaselineStateMachine",
+            state_machine_name=f"mmc-{env}-{props.project_name}-baseline",
+            state_machine_type=sfn.StateMachineType.STANDARD,
+            definition_body=sfn.DefinitionBody.from_string(json.dumps(definition)),
+            timeout=Duration.hours(6),
+        )
+
+    def _branch_definition(
+        self,
+        *,
+        analyser: str,
+        task_def: ecs.FargateTaskDefinition,
+        cluster: ecs.ICluster,
+    ) -> dict[str, Any]:
+        """One Parallel branch — RunTask with Retry + Catch → per-branch Pass.
+
+        Returns:
+            Amazon States Language branch dict.
+        """
+        props = self._props
+        subnet_ids = [subnet.subnet_id for subnet in cluster.vpc.private_subnets or cluster.vpc.public_subnets]
+        container_name = f"Container{analyser.title()}"
+        run_task_state = {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::ecs:runTask.sync",
+            "Parameters": {
+                "LaunchType": "FARGATE",
+                "Cluster": cluster.cluster_arn,
+                "TaskDefinition": task_def.task_definition_arn,
+                "NetworkConfiguration": {
+                    "AwsvpcConfiguration": {
+                        "Subnets": subnet_ids,
+                        "AssignPublicIp": "DISABLED",
+                    },
+                },
+                "Overrides": {
+                    "ContainerOverrides": [
+                        {
+                            "Name": container_name,
+                            "Environment": [
+                                {"Name": "PROJECT_NAME", "Value": props.project_name},
+                                {"Name": "RUN_ID", "Value.$": "$.run_id"},
+                                {"Name": "ANALYSER_TYPE", "Value": f"baseline-{analyser}"},
+                                {"Name": "SNAPSHOT_URI", "Value.$": "$.snapshot_uri"},
+                                {"Name": "ENVIRONMENT", "Value": props.environment},
+                                {"Name": "MMC_ANALYSER_MODULE", "Value": _ANALYSER_MODULES[analyser]},
+                            ],
+                        },
+                    ],
+                },
+            },
+            "Retry": [
+                {
+                    "ErrorEquals": ["States.TaskFailed", "ECS.AmazonECSException"],
+                    "IntervalSeconds": props.sfn_retry_backoff_seconds,
+                    "MaxAttempts": props.sfn_retry_max_attempts,
+                    "BackoffRate": 2.0,
+                },
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": ["States.ALL"],
+                    "Next": f"Branch{analyser.title()}Failed",
+                    "ResultPath": "$.error",
+                },
+            ],
+            "End": True,
+        }
+        failed_state = {
+            "Type": "Pass",
+            "End": True,
+            "Result": {"analyser": f"baseline-{analyser}", "outcome": "branch_failed"},
+        }
+        return {
+            "StartAt": f"Run{analyser.title()}",
+            "States": {
+                f"Run{analyser.title()}": run_task_state,
+                f"Branch{analyser.title()}Failed": failed_state,
+            },
+        }
+
+    def _build_event_rule(self, *, env: str, state_machine: sfn.StateMachine) -> events.Rule:
+        """S3 ``Object Created`` rule → SFN ``StartExecution``.
+
+        Cross-account event forwarding is out of scope for the prototype;
+        the producer bucket ARN is a prop so a multi-account topology can
+        land later without refactor.
+
+        Returns:
+            The created EventBridge rule.
+        """
+        props = self._props
+        producer_bucket_name = _bucket_name_from_arn(props.producer_bucket_arn)
+        rule = events.Rule(
+            self,
+            "SnapshotObjectCreatedRule",
+            rule_name=f"mmc-{env}-{props.project_name}-baseline-trigger",
+            event_pattern=events.EventPattern(
+                source=["aws.s3"],
+                detail_type=["Object Created"],
+                detail={
+                    "bucket": {"name": [producer_bucket_name]},
+                    "object": {"key": [{"prefix": props.producer_prefix}]},
+                },
+            ),
+        )
+        rule.add_target(
+            events_targets.SfnStateMachine(  # ty: ignore[invalid-argument-type]
+                state_machine,
+                input=events.RuleTargetInput.from_object(
+                    {
+                        "snapshot_uri": events.EventField.from_path("$.detail.object.key"),
+                        "run_id": events.EventField.from_path("$.id"),
+                    },
+                ),
+            ),
+        )
+        return rule

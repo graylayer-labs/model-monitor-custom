@@ -1,0 +1,2027 @@
+{
+  "Outputs": {
+    "EventRuleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "SnapshotObjectCreatedRuleCDBC9F06",
+          "Arn"
+        ]
+      }
+    },
+    "LogGroupBiasName": {
+      "Value": {
+        "Ref": "LogGroupBiasDAB2C864"
+      }
+    },
+    "LogGroupDqName": {
+      "Value": {
+        "Ref": "LogGroupDq73F8C20A"
+      }
+    },
+    "LogGroupExplainName": {
+      "Value": {
+        "Ref": "LogGroupExplainFFE17C45"
+      }
+    },
+    "LogGroupMqName": {
+      "Value": {
+        "Ref": "LogGroupMq7C882E60"
+      }
+    },
+    "LogGroupShadowName": {
+      "Value": {
+        "Ref": "LogGroupShadow878FFB39"
+      }
+    },
+    "StateMachineArn": {
+      "Value": {
+        "Ref": "BaselineStateMachineC8CE9B66"
+      }
+    }
+  },
+  "Parameters": {
+    "BootstrapVersion": {
+      "Default": "/cdk-bootstrap/hnb659fds/version",
+      "Description": "Version of the CDK Bootstrap resources in this environment, automatically retrieved from SSM Parameter Store. [cdk:skip]",
+      "Type": "AWS::SSM::Parameter::Value<String>"
+    }
+  },
+  "Resources": {
+    "AnalyserCluster59F67AE7": {
+      "Properties": {
+        "CapacityProviders": [
+          "FARGATE",
+          "FARGATE_SPOT"
+        ],
+        "Cluster": {
+          "Ref": "AnalyserClusterE60FB0A7"
+        },
+        "DefaultCapacityProviderStrategy": []
+      },
+      "Type": "AWS::ECS::ClusterCapacityProviderAssociations"
+    },
+    "AnalyserClusterE60FB0A7": {
+      "Properties": {
+        "ClusterName": "mmc-test-baseline",
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ]
+      },
+      "Type": "AWS::ECS::Cluster"
+    },
+    "AnalyserVpcD0F1C9CC": {
+      "Properties": {
+        "CidrBlock": "10.0.0.0/16",
+        "EnableDnsHostnames": true,
+        "EnableDnsSupport": true,
+        "InstanceTenancy": "default",
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Name",
+            "Value": "MMC-Test-OperationsBaseline-Example/AnalyserVpc"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ]
+      },
+      "Type": "AWS::EC2::VPC"
+    },
+    "AnalyserVpcIGWBFA44368": {
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Name",
+            "Value": "MMC-Test-OperationsBaseline-Example/AnalyserVpc"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ]
+      },
+      "Type": "AWS::EC2::InternetGateway"
+    },
+    "AnalyserVpcIsolatedSubnet1RouteTableA378971A": {
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Name",
+            "Value": "MMC-Test-OperationsBaseline-Example/AnalyserVpc/IsolatedSubnet1"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ],
+        "VpcId": {
+          "Ref": "AnalyserVpcD0F1C9CC"
+        }
+      },
+      "Type": "AWS::EC2::RouteTable"
+    },
+    "AnalyserVpcIsolatedSubnet1RouteTableAssociation791ABA50": {
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "AnalyserVpcIsolatedSubnet1RouteTableA378971A"
+        },
+        "SubnetId": {
+          "Ref": "AnalyserVpcIsolatedSubnet1Subnet950B3B1A"
+        }
+      },
+      "Type": "AWS::EC2::SubnetRouteTableAssociation"
+    },
+    "AnalyserVpcIsolatedSubnet1Subnet950B3B1A": {
+      "Properties": {
+        "AvailabilityZone": "dummy1a",
+        "CidrBlock": "10.0.128.0/18",
+        "MapPublicIpOnLaunch": false,
+        "Tags": [
+          {
+            "Key": "aws-cdk:subnet-name",
+            "Value": "Isolated"
+          },
+          {
+            "Key": "aws-cdk:subnet-type",
+            "Value": "Isolated"
+          },
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Name",
+            "Value": "MMC-Test-OperationsBaseline-Example/AnalyserVpc/IsolatedSubnet1"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ],
+        "VpcId": {
+          "Ref": "AnalyserVpcD0F1C9CC"
+        }
+      },
+      "Type": "AWS::EC2::Subnet"
+    },
+    "AnalyserVpcIsolatedSubnet2RouteTable5B5459D5": {
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Name",
+            "Value": "MMC-Test-OperationsBaseline-Example/AnalyserVpc/IsolatedSubnet2"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ],
+        "VpcId": {
+          "Ref": "AnalyserVpcD0F1C9CC"
+        }
+      },
+      "Type": "AWS::EC2::RouteTable"
+    },
+    "AnalyserVpcIsolatedSubnet2RouteTableAssociation20486C14": {
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "AnalyserVpcIsolatedSubnet2RouteTable5B5459D5"
+        },
+        "SubnetId": {
+          "Ref": "AnalyserVpcIsolatedSubnet2SubnetD83621D2"
+        }
+      },
+      "Type": "AWS::EC2::SubnetRouteTableAssociation"
+    },
+    "AnalyserVpcIsolatedSubnet2SubnetD83621D2": {
+      "Properties": {
+        "AvailabilityZone": "dummy1b",
+        "CidrBlock": "10.0.192.0/18",
+        "MapPublicIpOnLaunch": false,
+        "Tags": [
+          {
+            "Key": "aws-cdk:subnet-name",
+            "Value": "Isolated"
+          },
+          {
+            "Key": "aws-cdk:subnet-type",
+            "Value": "Isolated"
+          },
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Name",
+            "Value": "MMC-Test-OperationsBaseline-Example/AnalyserVpc/IsolatedSubnet2"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ],
+        "VpcId": {
+          "Ref": "AnalyserVpcD0F1C9CC"
+        }
+      },
+      "Type": "AWS::EC2::Subnet"
+    },
+    "AnalyserVpcPublicSubnet1DefaultRouteC5E4F2D2": {
+      "DependsOn": [
+        "AnalyserVpcVPCGWCFA449AE"
+      ],
+      "Properties": {
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": {
+          "Ref": "AnalyserVpcIGWBFA44368"
+        },
+        "RouteTableId": {
+          "Ref": "AnalyserVpcPublicSubnet1RouteTable93B673B7"
+        }
+      },
+      "Type": "AWS::EC2::Route"
+    },
+    "AnalyserVpcPublicSubnet1RouteTable93B673B7": {
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Name",
+            "Value": "MMC-Test-OperationsBaseline-Example/AnalyserVpc/PublicSubnet1"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ],
+        "VpcId": {
+          "Ref": "AnalyserVpcD0F1C9CC"
+        }
+      },
+      "Type": "AWS::EC2::RouteTable"
+    },
+    "AnalyserVpcPublicSubnet1RouteTableAssociation32074329": {
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "AnalyserVpcPublicSubnet1RouteTable93B673B7"
+        },
+        "SubnetId": {
+          "Ref": "AnalyserVpcPublicSubnet1Subnet10285E60"
+        }
+      },
+      "Type": "AWS::EC2::SubnetRouteTableAssociation"
+    },
+    "AnalyserVpcPublicSubnet1Subnet10285E60": {
+      "Properties": {
+        "AvailabilityZone": "dummy1a",
+        "CidrBlock": "10.0.0.0/18",
+        "MapPublicIpOnLaunch": true,
+        "Tags": [
+          {
+            "Key": "aws-cdk:subnet-name",
+            "Value": "Public"
+          },
+          {
+            "Key": "aws-cdk:subnet-type",
+            "Value": "Public"
+          },
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Name",
+            "Value": "MMC-Test-OperationsBaseline-Example/AnalyserVpc/PublicSubnet1"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ],
+        "VpcId": {
+          "Ref": "AnalyserVpcD0F1C9CC"
+        }
+      },
+      "Type": "AWS::EC2::Subnet"
+    },
+    "AnalyserVpcPublicSubnet2DefaultRoute9B1B0CCF": {
+      "DependsOn": [
+        "AnalyserVpcVPCGWCFA449AE"
+      ],
+      "Properties": {
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": {
+          "Ref": "AnalyserVpcIGWBFA44368"
+        },
+        "RouteTableId": {
+          "Ref": "AnalyserVpcPublicSubnet2RouteTable4FAC892E"
+        }
+      },
+      "Type": "AWS::EC2::Route"
+    },
+    "AnalyserVpcPublicSubnet2RouteTable4FAC892E": {
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Name",
+            "Value": "MMC-Test-OperationsBaseline-Example/AnalyserVpc/PublicSubnet2"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ],
+        "VpcId": {
+          "Ref": "AnalyserVpcD0F1C9CC"
+        }
+      },
+      "Type": "AWS::EC2::RouteTable"
+    },
+    "AnalyserVpcPublicSubnet2RouteTableAssociation2F4BFF62": {
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "AnalyserVpcPublicSubnet2RouteTable4FAC892E"
+        },
+        "SubnetId": {
+          "Ref": "AnalyserVpcPublicSubnet2Subnet674C52A9"
+        }
+      },
+      "Type": "AWS::EC2::SubnetRouteTableAssociation"
+    },
+    "AnalyserVpcPublicSubnet2Subnet674C52A9": {
+      "Properties": {
+        "AvailabilityZone": "dummy1b",
+        "CidrBlock": "10.0.64.0/18",
+        "MapPublicIpOnLaunch": true,
+        "Tags": [
+          {
+            "Key": "aws-cdk:subnet-name",
+            "Value": "Public"
+          },
+          {
+            "Key": "aws-cdk:subnet-type",
+            "Value": "Public"
+          },
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Name",
+            "Value": "MMC-Test-OperationsBaseline-Example/AnalyserVpc/PublicSubnet2"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ],
+        "VpcId": {
+          "Ref": "AnalyserVpcD0F1C9CC"
+        }
+      },
+      "Type": "AWS::EC2::Subnet"
+    },
+    "AnalyserVpcVPCGWCFA449AE": {
+      "Properties": {
+        "InternetGatewayId": {
+          "Ref": "AnalyserVpcIGWBFA44368"
+        },
+        "VpcId": {
+          "Ref": "AnalyserVpcD0F1C9CC"
+        }
+      },
+      "Type": "AWS::EC2::VPCGatewayAttachment"
+    },
+    "BaselineStateMachineC8CE9B66": {
+      "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "BaselineStateMachineRole9D5319C4"
+      ],
+      "Properties": {
+        "DefinitionString": {
+          "Fn::Join": [
+            "",
+            [
+              "{\"Comment\": \"mmc-test-example-classifier-baseline\", \"StartAt\": \"AllAnalysers\", \"States\": {\"AllAnalysers\": {\"Type\": \"Parallel\", \"End\": true, \"Branches\": [{\"StartAt\": \"RunMq\", \"States\": {\"RunMq\": {\"Type\": \"Task\", \"Resource\": \"arn:aws:states:::ecs:runTask.sync\", \"Parameters\": {\"LaunchType\": \"FARGATE\", \"Cluster\": \"",
+              {
+                "Fn::GetAtt": [
+                  "AnalyserClusterE60FB0A7",
+                  "Arn"
+                ]
+              },
+              "\", \"TaskDefinition\": \"",
+              {
+                "Ref": "TaskDefMq5583C9F5"
+              },
+              "\", \"NetworkConfiguration\": {\"AwsvpcConfiguration\": {\"Subnets\": [\"",
+              {
+                "Ref": "AnalyserVpcPublicSubnet1Subnet10285E60"
+              },
+              "\", \"",
+              {
+                "Ref": "AnalyserVpcPublicSubnet2Subnet674C52A9"
+              },
+              "\"], \"AssignPublicIp\": \"DISABLED\"}}, \"Overrides\": {\"ContainerOverrides\": [{\"Name\": \"ContainerMq\", \"Environment\": [{\"Name\": \"PROJECT_NAME\", \"Value\": \"example-classifier\"}, {\"Name\": \"RUN_ID\", \"Value.$\": \"$.run_id\"}, {\"Name\": \"ANALYSER_TYPE\", \"Value\": \"baseline-mq\"}, {\"Name\": \"SNAPSHOT_URI\", \"Value.$\": \"$.snapshot_uri\"}, {\"Name\": \"ENVIRONMENT\", \"Value\": \"test\"}, {\"Name\": \"MMC_ANALYSER_MODULE\", \"Value\": \"analyser_mq.analyser:MqAnalyser\"}]}]}}, \"Retry\": [{\"ErrorEquals\": [\"States.TaskFailed\", \"ECS.AmazonECSException\"], \"IntervalSeconds\": 30, \"MaxAttempts\": 3, \"BackoffRate\": 2.0}], \"Catch\": [{\"ErrorEquals\": [\"States.ALL\"], \"Next\": \"BranchMqFailed\", \"ResultPath\": \"$.error\"}], \"End\": true}, \"BranchMqFailed\": {\"Type\": \"Pass\", \"End\": true, \"Result\": {\"analyser\": \"baseline-mq\", \"outcome\": \"branch_failed\"}}}}, {\"StartAt\": \"RunDq\", \"States\": {\"RunDq\": {\"Type\": \"Task\", \"Resource\": \"arn:aws:states:::ecs:runTask.sync\", \"Parameters\": {\"LaunchType\": \"FARGATE\", \"Cluster\": \"",
+              {
+                "Fn::GetAtt": [
+                  "AnalyserClusterE60FB0A7",
+                  "Arn"
+                ]
+              },
+              "\", \"TaskDefinition\": \"",
+              {
+                "Ref": "TaskDefDq9D5887DC"
+              },
+              "\", \"NetworkConfiguration\": {\"AwsvpcConfiguration\": {\"Subnets\": [\"",
+              {
+                "Ref": "AnalyserVpcPublicSubnet1Subnet10285E60"
+              },
+              "\", \"",
+              {
+                "Ref": "AnalyserVpcPublicSubnet2Subnet674C52A9"
+              },
+              "\"], \"AssignPublicIp\": \"DISABLED\"}}, \"Overrides\": {\"ContainerOverrides\": [{\"Name\": \"ContainerDq\", \"Environment\": [{\"Name\": \"PROJECT_NAME\", \"Value\": \"example-classifier\"}, {\"Name\": \"RUN_ID\", \"Value.$\": \"$.run_id\"}, {\"Name\": \"ANALYSER_TYPE\", \"Value\": \"baseline-dq\"}, {\"Name\": \"SNAPSHOT_URI\", \"Value.$\": \"$.snapshot_uri\"}, {\"Name\": \"ENVIRONMENT\", \"Value\": \"test\"}, {\"Name\": \"MMC_ANALYSER_MODULE\", \"Value\": \"analyser_dq.analyser:DqAnalyser\"}]}]}}, \"Retry\": [{\"ErrorEquals\": [\"States.TaskFailed\", \"ECS.AmazonECSException\"], \"IntervalSeconds\": 30, \"MaxAttempts\": 3, \"BackoffRate\": 2.0}], \"Catch\": [{\"ErrorEquals\": [\"States.ALL\"], \"Next\": \"BranchDqFailed\", \"ResultPath\": \"$.error\"}], \"End\": true}, \"BranchDqFailed\": {\"Type\": \"Pass\", \"End\": true, \"Result\": {\"analyser\": \"baseline-dq\", \"outcome\": \"branch_failed\"}}}}, {\"StartAt\": \"RunBias\", \"States\": {\"RunBias\": {\"Type\": \"Task\", \"Resource\": \"arn:aws:states:::ecs:runTask.sync\", \"Parameters\": {\"LaunchType\": \"FARGATE\", \"Cluster\": \"",
+              {
+                "Fn::GetAtt": [
+                  "AnalyserClusterE60FB0A7",
+                  "Arn"
+                ]
+              },
+              "\", \"TaskDefinition\": \"",
+              {
+                "Ref": "TaskDefBiasBC490EA1"
+              },
+              "\", \"NetworkConfiguration\": {\"AwsvpcConfiguration\": {\"Subnets\": [\"",
+              {
+                "Ref": "AnalyserVpcPublicSubnet1Subnet10285E60"
+              },
+              "\", \"",
+              {
+                "Ref": "AnalyserVpcPublicSubnet2Subnet674C52A9"
+              },
+              "\"], \"AssignPublicIp\": \"DISABLED\"}}, \"Overrides\": {\"ContainerOverrides\": [{\"Name\": \"ContainerBias\", \"Environment\": [{\"Name\": \"PROJECT_NAME\", \"Value\": \"example-classifier\"}, {\"Name\": \"RUN_ID\", \"Value.$\": \"$.run_id\"}, {\"Name\": \"ANALYSER_TYPE\", \"Value\": \"baseline-bias\"}, {\"Name\": \"SNAPSHOT_URI\", \"Value.$\": \"$.snapshot_uri\"}, {\"Name\": \"ENVIRONMENT\", \"Value\": \"test\"}, {\"Name\": \"MMC_ANALYSER_MODULE\", \"Value\": \"analyser_bias.analyser:BiasAnalyser\"}]}]}}, \"Retry\": [{\"ErrorEquals\": [\"States.TaskFailed\", \"ECS.AmazonECSException\"], \"IntervalSeconds\": 30, \"MaxAttempts\": 3, \"BackoffRate\": 2.0}], \"Catch\": [{\"ErrorEquals\": [\"States.ALL\"], \"Next\": \"BranchBiasFailed\", \"ResultPath\": \"$.error\"}], \"End\": true}, \"BranchBiasFailed\": {\"Type\": \"Pass\", \"End\": true, \"Result\": {\"analyser\": \"baseline-bias\", \"outcome\": \"branch_failed\"}}}}, {\"StartAt\": \"RunExplain\", \"States\": {\"RunExplain\": {\"Type\": \"Task\", \"Resource\": \"arn:aws:states:::ecs:runTask.sync\", \"Parameters\": {\"LaunchType\": \"FARGATE\", \"Cluster\": \"",
+              {
+                "Fn::GetAtt": [
+                  "AnalyserClusterE60FB0A7",
+                  "Arn"
+                ]
+              },
+              "\", \"TaskDefinition\": \"",
+              {
+                "Ref": "TaskDefExplain992A3CCD"
+              },
+              "\", \"NetworkConfiguration\": {\"AwsvpcConfiguration\": {\"Subnets\": [\"",
+              {
+                "Ref": "AnalyserVpcPublicSubnet1Subnet10285E60"
+              },
+              "\", \"",
+              {
+                "Ref": "AnalyserVpcPublicSubnet2Subnet674C52A9"
+              },
+              "\"], \"AssignPublicIp\": \"DISABLED\"}}, \"Overrides\": {\"ContainerOverrides\": [{\"Name\": \"ContainerExplain\", \"Environment\": [{\"Name\": \"PROJECT_NAME\", \"Value\": \"example-classifier\"}, {\"Name\": \"RUN_ID\", \"Value.$\": \"$.run_id\"}, {\"Name\": \"ANALYSER_TYPE\", \"Value\": \"baseline-explain\"}, {\"Name\": \"SNAPSHOT_URI\", \"Value.$\": \"$.snapshot_uri\"}, {\"Name\": \"ENVIRONMENT\", \"Value\": \"test\"}, {\"Name\": \"MMC_ANALYSER_MODULE\", \"Value\": \"analyser_explain.analyser:ExplainAnalyser\"}]}]}}, \"Retry\": [{\"ErrorEquals\": [\"States.TaskFailed\", \"ECS.AmazonECSException\"], \"IntervalSeconds\": 30, \"MaxAttempts\": 3, \"BackoffRate\": 2.0}], \"Catch\": [{\"ErrorEquals\": [\"States.ALL\"], \"Next\": \"BranchExplainFailed\", \"ResultPath\": \"$.error\"}], \"End\": true}, \"BranchExplainFailed\": {\"Type\": \"Pass\", \"End\": true, \"Result\": {\"analyser\": \"baseline-explain\", \"outcome\": \"branch_failed\"}}}}, {\"StartAt\": \"RunShadow\", \"States\": {\"RunShadow\": {\"Type\": \"Task\", \"Resource\": \"arn:aws:states:::ecs:runTask.sync\", \"Parameters\": {\"LaunchType\": \"FARGATE\", \"Cluster\": \"",
+              {
+                "Fn::GetAtt": [
+                  "AnalyserClusterE60FB0A7",
+                  "Arn"
+                ]
+              },
+              "\", \"TaskDefinition\": \"",
+              {
+                "Ref": "TaskDefShadow56F4BF9F"
+              },
+              "\", \"NetworkConfiguration\": {\"AwsvpcConfiguration\": {\"Subnets\": [\"",
+              {
+                "Ref": "AnalyserVpcPublicSubnet1Subnet10285E60"
+              },
+              "\", \"",
+              {
+                "Ref": "AnalyserVpcPublicSubnet2Subnet674C52A9"
+              },
+              "\"], \"AssignPublicIp\": \"DISABLED\"}}, \"Overrides\": {\"ContainerOverrides\": [{\"Name\": \"ContainerShadow\", \"Environment\": [{\"Name\": \"PROJECT_NAME\", \"Value\": \"example-classifier\"}, {\"Name\": \"RUN_ID\", \"Value.$\": \"$.run_id\"}, {\"Name\": \"ANALYSER_TYPE\", \"Value\": \"baseline-shadow\"}, {\"Name\": \"SNAPSHOT_URI\", \"Value.$\": \"$.snapshot_uri\"}, {\"Name\": \"ENVIRONMENT\", \"Value\": \"test\"}, {\"Name\": \"MMC_ANALYSER_MODULE\", \"Value\": \"analyser_shadow.analyser:ShadowAnalyser\"}]}]}}, \"Retry\": [{\"ErrorEquals\": [\"States.TaskFailed\", \"ECS.AmazonECSException\"], \"IntervalSeconds\": 30, \"MaxAttempts\": 3, \"BackoffRate\": 2.0}], \"Catch\": [{\"ErrorEquals\": [\"States.ALL\"], \"Next\": \"BranchShadowFailed\", \"ResultPath\": \"$.error\"}], \"End\": true}, \"BranchShadowFailed\": {\"Type\": \"Pass\", \"End\": true, \"Result\": {\"analyser\": \"baseline-shadow\", \"outcome\": \"branch_failed\"}}}}]}}}"
+            ]
+          ]
+        },
+        "RoleArn": {
+          "Fn::GetAtt": [
+            "BaselineStateMachineRole9D5319C4",
+            "Arn"
+          ]
+        },
+        "StateMachineName": "mmc-test-example-classifier-baseline",
+        "StateMachineType": "STANDARD",
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ]
+      },
+      "Type": "AWS::StepFunctions::StateMachine",
+      "UpdateReplacePolicy": "Delete"
+    },
+    "BaselineStateMachineEventsRoleCC5BB3F1": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "events.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "BaselineStateMachineEventsRoleDefaultPolicyA33EF384": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": "states:StartExecution",
+              "Effect": "Allow",
+              "Resource": {
+                "Ref": "BaselineStateMachineC8CE9B66"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "BaselineStateMachineEventsRoleDefaultPolicyA33EF384",
+        "Roles": [
+          {
+            "Ref": "BaselineStateMachineEventsRoleCC5BB3F1"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Policy"
+    },
+    "BaselineStateMachineRole9D5319C4": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "states.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "LogGroupBiasDAB2C864": {
+      "DeletionPolicy": "Delete",
+      "Properties": {
+        "LogGroupName": "/mmc/test/baseline-bias",
+        "RetentionInDays": 30,
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ]
+      },
+      "Type": "AWS::Logs::LogGroup",
+      "UpdateReplacePolicy": "Delete"
+    },
+    "LogGroupDq73F8C20A": {
+      "DeletionPolicy": "Delete",
+      "Properties": {
+        "LogGroupName": "/mmc/test/baseline-dq",
+        "RetentionInDays": 30,
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ]
+      },
+      "Type": "AWS::Logs::LogGroup",
+      "UpdateReplacePolicy": "Delete"
+    },
+    "LogGroupExplainFFE17C45": {
+      "DeletionPolicy": "Delete",
+      "Properties": {
+        "LogGroupName": "/mmc/test/baseline-explain",
+        "RetentionInDays": 30,
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ]
+      },
+      "Type": "AWS::Logs::LogGroup",
+      "UpdateReplacePolicy": "Delete"
+    },
+    "LogGroupMq7C882E60": {
+      "DeletionPolicy": "Delete",
+      "Properties": {
+        "LogGroupName": "/mmc/test/baseline-mq",
+        "RetentionInDays": 30,
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ]
+      },
+      "Type": "AWS::Logs::LogGroup",
+      "UpdateReplacePolicy": "Delete"
+    },
+    "LogGroupShadow878FFB39": {
+      "DeletionPolicy": "Delete",
+      "Properties": {
+        "LogGroupName": "/mmc/test/baseline-shadow",
+        "RetentionInDays": 30,
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ]
+      },
+      "Type": "AWS::Logs::LogGroup",
+      "UpdateReplacePolicy": "Delete"
+    },
+    "SnapshotObjectCreatedRuleCDBC9F06": {
+      "Properties": {
+        "EventPattern": {
+          "detail": {
+            "bucket": {
+              "name": [
+                "mmc-training-snapshots-test"
+              ]
+            },
+            "object": {
+              "key": [
+                {
+                  "prefix": "training-snapshots/"
+                }
+              ]
+            }
+          },
+          "detail-type": [
+            "Object Created"
+          ],
+          "source": [
+            "aws.s3"
+          ]
+        },
+        "Name": "mmc-test-example-classifier-baseline-trigger",
+        "State": "ENABLED",
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ],
+        "Targets": [
+          {
+            "Arn": {
+              "Ref": "BaselineStateMachineC8CE9B66"
+            },
+            "Id": "Target0",
+            "InputTransformer": {
+              "InputPathsMap": {
+                "detail-object-key": "$.detail.object.key",
+                "id": "$.id"
+              },
+              "InputTemplate": "{\"snapshot_uri\":<detail-object-key>,\"run_id\":<id>}"
+            },
+            "RoleArn": {
+              "Fn::GetAtt": [
+                "BaselineStateMachineEventsRoleCC5BB3F1",
+                "Arn"
+              ]
+            }
+          }
+        ]
+      },
+      "Type": "AWS::Events::Rule"
+    },
+    "TaskDefBiasBC490EA1": {
+      "Properties": {
+        "ContainerDefinitions": [
+          {
+            "Environment": [
+              {
+                "Name": "PROJECT_NAME",
+                "Value": "example-classifier"
+              },
+              {
+                "Name": "ANALYSER_TYPE",
+                "Value": "baseline-bias"
+              },
+              {
+                "Name": "ENVIRONMENT",
+                "Value": "test"
+              },
+              {
+                "Name": "VARIANT",
+                "Value": "Baseline"
+              },
+              {
+                "Name": "BASELINE_WRITER_ROLE_ARN",
+                "Value": "arn:aws:iam::222222222222:role/mmc-test-baseline-writer"
+              },
+              {
+                "Name": "BASELINES_BUCKET_ARN",
+                "Value": "arn:aws:s3:::mmc-baselines"
+              },
+              {
+                "Name": "MMC_ANALYSER_MODULE",
+                "Value": "analyser_bias.analyser:BiasAnalyser"
+              }
+            ],
+            "Essential": true,
+            "Image": "333333333333.dkr.ecr.eu-west-1.amazonaws.com/mmc/analyser-bias:sha-abc",
+            "LogConfiguration": {
+              "LogDriver": "awslogs",
+              "Options": {
+                "awslogs-group": {
+                  "Ref": "LogGroupBiasDAB2C864"
+                },
+                "awslogs-region": "eu-west-1",
+                "awslogs-stream-prefix": "baseline-bias"
+              }
+            },
+            "Name": "ContainerBias"
+          }
+        ],
+        "Cpu": "1024",
+        "ExecutionRoleArn": {
+          "Fn::GetAtt": [
+            "TaskDefBiasExecutionRoleF09EA86D",
+            "Arn"
+          ]
+        },
+        "Family": "mmc-test-baseline-bias",
+        "Memory": "4096",
+        "NetworkMode": "awsvpc",
+        "RequiresCompatibilities": [
+          "FARGATE"
+        ],
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ],
+        "TaskRoleArn": {
+          "Fn::GetAtt": [
+            "TaskRoleBias29A573EA",
+            "Arn"
+          ]
+        }
+      },
+      "Type": "AWS::ECS::TaskDefinition"
+    },
+    "TaskDefBiasExecutionRoleDefaultPolicyEDADB78A": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "LogGroupBiasDAB2C864",
+                  "Arn"
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "TaskDefBiasExecutionRoleDefaultPolicyEDADB78A",
+        "Roles": [
+          {
+            "Ref": "TaskDefBiasExecutionRoleF09EA86D"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Policy"
+    },
+    "TaskDefBiasExecutionRoleF09EA86D": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ecs-tasks.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "TaskDefDq9D5887DC": {
+      "Properties": {
+        "ContainerDefinitions": [
+          {
+            "Environment": [
+              {
+                "Name": "PROJECT_NAME",
+                "Value": "example-classifier"
+              },
+              {
+                "Name": "ANALYSER_TYPE",
+                "Value": "baseline-dq"
+              },
+              {
+                "Name": "ENVIRONMENT",
+                "Value": "test"
+              },
+              {
+                "Name": "VARIANT",
+                "Value": "Baseline"
+              },
+              {
+                "Name": "BASELINE_WRITER_ROLE_ARN",
+                "Value": "arn:aws:iam::222222222222:role/mmc-test-baseline-writer"
+              },
+              {
+                "Name": "BASELINES_BUCKET_ARN",
+                "Value": "arn:aws:s3:::mmc-baselines"
+              },
+              {
+                "Name": "MMC_ANALYSER_MODULE",
+                "Value": "analyser_dq.analyser:DqAnalyser"
+              }
+            ],
+            "Essential": true,
+            "Image": "333333333333.dkr.ecr.eu-west-1.amazonaws.com/mmc/analyser-dq:sha-abc",
+            "LogConfiguration": {
+              "LogDriver": "awslogs",
+              "Options": {
+                "awslogs-group": {
+                  "Ref": "LogGroupDq73F8C20A"
+                },
+                "awslogs-region": "eu-west-1",
+                "awslogs-stream-prefix": "baseline-dq"
+              }
+            },
+            "Name": "ContainerDq"
+          }
+        ],
+        "Cpu": "1024",
+        "ExecutionRoleArn": {
+          "Fn::GetAtt": [
+            "TaskDefDqExecutionRoleC77CD27C",
+            "Arn"
+          ]
+        },
+        "Family": "mmc-test-baseline-dq",
+        "Memory": "4096",
+        "NetworkMode": "awsvpc",
+        "RequiresCompatibilities": [
+          "FARGATE"
+        ],
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ],
+        "TaskRoleArn": {
+          "Fn::GetAtt": [
+            "TaskRoleDq1448A01F",
+            "Arn"
+          ]
+        }
+      },
+      "Type": "AWS::ECS::TaskDefinition"
+    },
+    "TaskDefDqExecutionRoleC77CD27C": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ecs-tasks.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "TaskDefDqExecutionRoleDefaultPolicyB1627806": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "LogGroupDq73F8C20A",
+                  "Arn"
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "TaskDefDqExecutionRoleDefaultPolicyB1627806",
+        "Roles": [
+          {
+            "Ref": "TaskDefDqExecutionRoleC77CD27C"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Policy"
+    },
+    "TaskDefExplain992A3CCD": {
+      "Properties": {
+        "ContainerDefinitions": [
+          {
+            "Environment": [
+              {
+                "Name": "PROJECT_NAME",
+                "Value": "example-classifier"
+              },
+              {
+                "Name": "ANALYSER_TYPE",
+                "Value": "baseline-explain"
+              },
+              {
+                "Name": "ENVIRONMENT",
+                "Value": "test"
+              },
+              {
+                "Name": "VARIANT",
+                "Value": "Baseline"
+              },
+              {
+                "Name": "BASELINE_WRITER_ROLE_ARN",
+                "Value": "arn:aws:iam::222222222222:role/mmc-test-baseline-writer"
+              },
+              {
+                "Name": "BASELINES_BUCKET_ARN",
+                "Value": "arn:aws:s3:::mmc-baselines"
+              },
+              {
+                "Name": "MMC_ANALYSER_MODULE",
+                "Value": "analyser_explain.analyser:ExplainAnalyser"
+              }
+            ],
+            "Essential": true,
+            "Image": "333333333333.dkr.ecr.eu-west-1.amazonaws.com/mmc/analyser-explain:sha-abc",
+            "LogConfiguration": {
+              "LogDriver": "awslogs",
+              "Options": {
+                "awslogs-group": {
+                  "Ref": "LogGroupExplainFFE17C45"
+                },
+                "awslogs-region": "eu-west-1",
+                "awslogs-stream-prefix": "baseline-explain"
+              }
+            },
+            "Name": "ContainerExplain"
+          }
+        ],
+        "Cpu": "1024",
+        "ExecutionRoleArn": {
+          "Fn::GetAtt": [
+            "TaskDefExplainExecutionRoleDF3F4563",
+            "Arn"
+          ]
+        },
+        "Family": "mmc-test-baseline-explain",
+        "Memory": "4096",
+        "NetworkMode": "awsvpc",
+        "RequiresCompatibilities": [
+          "FARGATE"
+        ],
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ],
+        "TaskRoleArn": {
+          "Fn::GetAtt": [
+            "TaskRoleExplain1420EF63",
+            "Arn"
+          ]
+        }
+      },
+      "Type": "AWS::ECS::TaskDefinition"
+    },
+    "TaskDefExplainExecutionRoleDF3F4563": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ecs-tasks.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "TaskDefExplainExecutionRoleDefaultPolicyA2A5A5B8": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "LogGroupExplainFFE17C45",
+                  "Arn"
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "TaskDefExplainExecutionRoleDefaultPolicyA2A5A5B8",
+        "Roles": [
+          {
+            "Ref": "TaskDefExplainExecutionRoleDF3F4563"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Policy"
+    },
+    "TaskDefMq5583C9F5": {
+      "Properties": {
+        "ContainerDefinitions": [
+          {
+            "Environment": [
+              {
+                "Name": "PROJECT_NAME",
+                "Value": "example-classifier"
+              },
+              {
+                "Name": "ANALYSER_TYPE",
+                "Value": "baseline-mq"
+              },
+              {
+                "Name": "ENVIRONMENT",
+                "Value": "test"
+              },
+              {
+                "Name": "VARIANT",
+                "Value": "Baseline"
+              },
+              {
+                "Name": "BASELINE_WRITER_ROLE_ARN",
+                "Value": "arn:aws:iam::222222222222:role/mmc-test-baseline-writer"
+              },
+              {
+                "Name": "BASELINES_BUCKET_ARN",
+                "Value": "arn:aws:s3:::mmc-baselines"
+              },
+              {
+                "Name": "MMC_ANALYSER_MODULE",
+                "Value": "analyser_mq.analyser:MqAnalyser"
+              }
+            ],
+            "Essential": true,
+            "Image": "333333333333.dkr.ecr.eu-west-1.amazonaws.com/mmc/analyser-mq:sha-abc",
+            "LogConfiguration": {
+              "LogDriver": "awslogs",
+              "Options": {
+                "awslogs-group": {
+                  "Ref": "LogGroupMq7C882E60"
+                },
+                "awslogs-region": "eu-west-1",
+                "awslogs-stream-prefix": "baseline-mq"
+              }
+            },
+            "Name": "ContainerMq"
+          }
+        ],
+        "Cpu": "1024",
+        "ExecutionRoleArn": {
+          "Fn::GetAtt": [
+            "TaskDefMqExecutionRoleD3BB1D01",
+            "Arn"
+          ]
+        },
+        "Family": "mmc-test-baseline-mq",
+        "Memory": "4096",
+        "NetworkMode": "awsvpc",
+        "RequiresCompatibilities": [
+          "FARGATE"
+        ],
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ],
+        "TaskRoleArn": {
+          "Fn::GetAtt": [
+            "TaskRoleMq64132D2A",
+            "Arn"
+          ]
+        }
+      },
+      "Type": "AWS::ECS::TaskDefinition"
+    },
+    "TaskDefMqExecutionRoleD3BB1D01": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ecs-tasks.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "TaskDefMqExecutionRoleDefaultPolicy89AF8DAB": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "LogGroupMq7C882E60",
+                  "Arn"
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "TaskDefMqExecutionRoleDefaultPolicy89AF8DAB",
+        "Roles": [
+          {
+            "Ref": "TaskDefMqExecutionRoleD3BB1D01"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Policy"
+    },
+    "TaskDefShadow56F4BF9F": {
+      "Properties": {
+        "ContainerDefinitions": [
+          {
+            "Environment": [
+              {
+                "Name": "PROJECT_NAME",
+                "Value": "example-classifier"
+              },
+              {
+                "Name": "ANALYSER_TYPE",
+                "Value": "baseline-shadow"
+              },
+              {
+                "Name": "ENVIRONMENT",
+                "Value": "test"
+              },
+              {
+                "Name": "VARIANT",
+                "Value": "Baseline"
+              },
+              {
+                "Name": "BASELINE_WRITER_ROLE_ARN",
+                "Value": "arn:aws:iam::222222222222:role/mmc-test-baseline-writer"
+              },
+              {
+                "Name": "BASELINES_BUCKET_ARN",
+                "Value": "arn:aws:s3:::mmc-baselines"
+              },
+              {
+                "Name": "MMC_ANALYSER_MODULE",
+                "Value": "analyser_shadow.analyser:ShadowAnalyser"
+              }
+            ],
+            "Essential": true,
+            "Image": "333333333333.dkr.ecr.eu-west-1.amazonaws.com/mmc/analyser-shadow:sha-abc",
+            "LogConfiguration": {
+              "LogDriver": "awslogs",
+              "Options": {
+                "awslogs-group": {
+                  "Ref": "LogGroupShadow878FFB39"
+                },
+                "awslogs-region": "eu-west-1",
+                "awslogs-stream-prefix": "baseline-shadow"
+              }
+            },
+            "Name": "ContainerShadow"
+          }
+        ],
+        "Cpu": "1024",
+        "ExecutionRoleArn": {
+          "Fn::GetAtt": [
+            "TaskDefShadowExecutionRole001D7708",
+            "Arn"
+          ]
+        },
+        "Family": "mmc-test-baseline-shadow",
+        "Memory": "4096",
+        "NetworkMode": "awsvpc",
+        "RequiresCompatibilities": [
+          "FARGATE"
+        ],
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ],
+        "TaskRoleArn": {
+          "Fn::GetAtt": [
+            "TaskRoleShadow6C670F31",
+            "Arn"
+          ]
+        }
+      },
+      "Type": "AWS::ECS::TaskDefinition"
+    },
+    "TaskDefShadowExecutionRole001D7708": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ecs-tasks.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "TaskDefShadowExecutionRoleDefaultPolicyCCE104D5": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "LogGroupShadow878FFB39",
+                  "Arn"
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "TaskDefShadowExecutionRoleDefaultPolicyCCE104D5",
+        "Roles": [
+          {
+            "Ref": "TaskDefShadowExecutionRole001D7708"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Policy"
+    },
+    "TaskRoleBias29A573EA": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ecs-tasks.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Description": "Fargate task role for mmc baseline-bias analyser",
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "TaskRoleBiasDefaultPolicyA36AD718": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "s3:GetObject*",
+                "s3:GetBucket*",
+                "s3:List*"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                "arn:aws:s3:::mmc-training-snapshots-test",
+                "arn:aws:s3:::mmc-training-snapshots-test/training-snapshots/*"
+              ]
+            },
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Resource": "arn:aws:iam::222222222222:role/mmc-test-baseline-writer",
+              "Sid": "AssumeBaselineWriter"
+            },
+            {
+              "Action": "kms:Decrypt",
+              "Effect": "Allow",
+              "Resource": "arn:aws:kms:eu-west-1:222222222222:key/abcd1234"
+            },
+            {
+              "Action": "cloudwatch:PutMetricData",
+              "Condition": {
+                "StringEquals": {
+                  "cloudwatch:namespace": "mmc/analyser/v1"
+                }
+              },
+              "Effect": "Allow",
+              "Resource": "*"
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "TaskRoleBiasDefaultPolicyA36AD718",
+        "Roles": [
+          {
+            "Ref": "TaskRoleBias29A573EA"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Policy"
+    },
+    "TaskRoleDq1448A01F": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ecs-tasks.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Description": "Fargate task role for mmc baseline-dq analyser",
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "TaskRoleDqDefaultPolicyB2AB78E6": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "s3:GetObject*",
+                "s3:GetBucket*",
+                "s3:List*"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                "arn:aws:s3:::mmc-training-snapshots-test",
+                "arn:aws:s3:::mmc-training-snapshots-test/training-snapshots/*"
+              ]
+            },
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Resource": "arn:aws:iam::222222222222:role/mmc-test-baseline-writer",
+              "Sid": "AssumeBaselineWriter"
+            },
+            {
+              "Action": "kms:Decrypt",
+              "Effect": "Allow",
+              "Resource": "arn:aws:kms:eu-west-1:222222222222:key/abcd1234"
+            },
+            {
+              "Action": "cloudwatch:PutMetricData",
+              "Condition": {
+                "StringEquals": {
+                  "cloudwatch:namespace": "mmc/analyser/v1"
+                }
+              },
+              "Effect": "Allow",
+              "Resource": "*"
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "TaskRoleDqDefaultPolicyB2AB78E6",
+        "Roles": [
+          {
+            "Ref": "TaskRoleDq1448A01F"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Policy"
+    },
+    "TaskRoleExplain1420EF63": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ecs-tasks.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Description": "Fargate task role for mmc baseline-explain analyser",
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "TaskRoleExplainDefaultPolicyE374A7FA": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "s3:GetObject*",
+                "s3:GetBucket*",
+                "s3:List*"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                "arn:aws:s3:::mmc-training-snapshots-test",
+                "arn:aws:s3:::mmc-training-snapshots-test/training-snapshots/*"
+              ]
+            },
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Resource": "arn:aws:iam::222222222222:role/mmc-test-baseline-writer",
+              "Sid": "AssumeBaselineWriter"
+            },
+            {
+              "Action": "kms:Decrypt",
+              "Effect": "Allow",
+              "Resource": "arn:aws:kms:eu-west-1:222222222222:key/abcd1234"
+            },
+            {
+              "Action": "cloudwatch:PutMetricData",
+              "Condition": {
+                "StringEquals": {
+                  "cloudwatch:namespace": "mmc/analyser/v1"
+                }
+              },
+              "Effect": "Allow",
+              "Resource": "*"
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "TaskRoleExplainDefaultPolicyE374A7FA",
+        "Roles": [
+          {
+            "Ref": "TaskRoleExplain1420EF63"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Policy"
+    },
+    "TaskRoleMq64132D2A": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ecs-tasks.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Description": "Fargate task role for mmc baseline-mq analyser",
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "TaskRoleMqDefaultPolicy6DA14FD2": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "s3:GetObject*",
+                "s3:GetBucket*",
+                "s3:List*"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                "arn:aws:s3:::mmc-training-snapshots-test",
+                "arn:aws:s3:::mmc-training-snapshots-test/training-snapshots/*"
+              ]
+            },
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Resource": "arn:aws:iam::222222222222:role/mmc-test-baseline-writer",
+              "Sid": "AssumeBaselineWriter"
+            },
+            {
+              "Action": "kms:Decrypt",
+              "Effect": "Allow",
+              "Resource": "arn:aws:kms:eu-west-1:222222222222:key/abcd1234"
+            },
+            {
+              "Action": "cloudwatch:PutMetricData",
+              "Condition": {
+                "StringEquals": {
+                  "cloudwatch:namespace": "mmc/analyser/v1"
+                }
+              },
+              "Effect": "Allow",
+              "Resource": "*"
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "TaskRoleMqDefaultPolicy6DA14FD2",
+        "Roles": [
+          {
+            "Ref": "TaskRoleMq64132D2A"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Policy"
+    },
+    "TaskRoleShadow6C670F31": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ecs-tasks.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Description": "Fargate task role for mmc baseline-shadow analyser",
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "TaskRoleShadowDefaultPolicy841888F7": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "s3:GetObject*",
+                "s3:GetBucket*",
+                "s3:List*"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                "arn:aws:s3:::mmc-training-snapshots-test",
+                "arn:aws:s3:::mmc-training-snapshots-test/training-snapshots/*"
+              ]
+            },
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Resource": "arn:aws:iam::222222222222:role/mmc-test-baseline-writer",
+              "Sid": "AssumeBaselineWriter"
+            },
+            {
+              "Action": "kms:Decrypt",
+              "Effect": "Allow",
+              "Resource": "arn:aws:kms:eu-west-1:222222222222:key/abcd1234"
+            },
+            {
+              "Action": "cloudwatch:PutMetricData",
+              "Condition": {
+                "StringEquals": {
+                  "cloudwatch:namespace": "mmc/analyser/v1"
+                }
+              },
+              "Effect": "Allow",
+              "Resource": "*"
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "TaskRoleShadowDefaultPolicy841888F7",
+        "Roles": [
+          {
+            "Ref": "TaskRoleShadow6C670F31"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Policy"
+    }
+  },
+  "Rules": {
+    "CheckBootstrapVersion": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Not": [
+              {
+                "Fn::Contains": [
+                  [
+                    "1",
+                    "2",
+                    "3",
+                    "4",
+                    "5"
+                  ],
+                  {
+                    "Ref": "BootstrapVersion"
+                  }
+                ]
+              }
+            ]
+          },
+          "AssertDescription": "CDK bootstrap stack version 6 required. Please run 'cdk bootstrap' with a recent version of the CDK CLI."
+        }
+      ]
+    }
+  }
+}

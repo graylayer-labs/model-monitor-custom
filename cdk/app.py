@@ -12,6 +12,10 @@ from model_monitor_cdk.stacks.inference_monitor_stack import (
     InferenceMonitorStack,
     InferenceMonitorStackProps,
 )
+from model_monitor_cdk.stacks.operations_baseline_stack import (
+    OperationsBaselineStack,
+    OperationsBaselineStackProps,
+)
 from model_monitor_cdk.stacks.shared_iam_stack import SharedIamStack, SharedIamStackProps
 
 app = cdk.App()
@@ -65,6 +69,26 @@ if target_account_name == "ml-inference-test":
             analyser_image_uris=_ANALYSER_IMAGES,
         ),
         env=cdk.Environment(account=_ML_INFERENCE_ACCOUNT_TEST, region="eu-west-1"),
+    )
+
+if target_account_name == "ml-operations":
+    # TODO(mmc-config): source the writer role ARN + producer bucket ARN from
+    # context once SharedIamStack outputs are wired through cdk.json.
+    OperationsBaselineStack(
+        app,
+        "MMC-Test-OperationsBaseline-Example",
+        props=OperationsBaselineStackProps(
+            environment="test",
+            project_name="example-classifier",
+            operations_account_id=_ML_OPERATIONS_ACCOUNT,
+            artifact_account_id=_ML_ARTIFACT_ACCOUNT,
+            baselines_bucket_arn=_BASELINES_BUCKET_ARN,
+            artifact_kms_key_arn=_ARTIFACT_KMS_KEY_ARN,
+            baseline_writer_role_arn="arn:aws:iam::000000000000:role/mmc-test-baseline-writer",  # placeholder
+            producer_bucket_arn="arn:aws:s3:::mmc-training-snapshots-placeholder",
+            analyser_image_uris=_ANALYSER_IMAGES,
+        ),
+        env=cdk.Environment(account=_ML_OPERATIONS_ACCOUNT, region="eu-west-1"),
     )
 
 app.synth()
