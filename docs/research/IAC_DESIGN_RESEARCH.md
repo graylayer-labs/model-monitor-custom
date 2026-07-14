@@ -258,7 +258,7 @@ Ground truth is mixed. Three patterns seen:
 | Pattern | Example | Notes |
 |---|---|---|
 | No `pyproject.toml`, use `requirements*.in` + pip-tools | aws-samples/aws-cdk-project-structure-python | Older AWS-sample style. Multiple `.in` files by dependency scope. |
-| One flat `pyproject.toml` at CDK root | UFX ml-iac (current), most `cdk init --language python` scaffolds since 2023 | Simplest. One package = one dep set. |
+| One flat `pyproject.toml` at CDK root | Most `cdk init --language python` scaffolds since 2023 | Simplest. One package = one dep set. |
 | One `pyproject.toml` per subpackage | Monorepo tools like `uv workspace`, Nx | Only pays off past ~5 subpackages. |
 
 **Recommendation for us.** One `pyproject.toml` at `cdk/`. If we later need a shared construct library consumed by another repo, add a second `pyproject.toml` inside `cdk/src/model_monitor_cdk/lib/` — not before. `Inference from aws-cdk-project-structure-python and ml-iac evolution.`
@@ -510,4 +510,4 @@ Once (3) is deployed with dummy images, container work in `containers/monitor/` 
 | 9 | https://github.com/aws-samples/aws-cdk-project-structure-python | Same-repo Lambda + CDK layout, two-scope requirements files (Part C.1, D.1) |
 | 10 | https://github.com/aws-samples/aws-cdk-examples/tree/master/python | Cross-account examples snippet library (Part A.4) |
 
-Deliverable path: `/Users/eoinmca/UFX/model-monitor-custom/docs/IAC_DESIGN_RESEARCH.md`
+Deliverable path: `docs/research/IAC_DESIGN_RESEARCH.md`

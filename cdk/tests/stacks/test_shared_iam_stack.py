@@ -15,7 +15,7 @@ READER_B = "222222222222"
 READER_C = "444444444444"
 WRITER = "333333333333"
 BUCKET_ARN = "arn:aws:s3:::mmc-baselines-abc"
-KMS_ARN = "arn:aws:kms:eu-west-1:965377249924:key/abcd-efgh"
+KMS_ARN = "arn:aws:kms:eu-west-1:555555555555:key/abcd-efgh"
 _SNAPSHOT_DIR = Path(__file__).parent / "snapshots"
 
 

@@ -85,7 +85,7 @@
                 {
                   "Action": "kms:Decrypt",
                   "Effect": "Allow",
-                  "Resource": "arn:aws:kms:eu-west-1:965377249924:key/abcd-efgh",
+                  "Resource": "arn:aws:kms:eu-west-1:555555555555:key/abcd-efgh",
                   "Sid": "KmsRead"
                 }
               ],
@@ -163,7 +163,7 @@
                 {
                   "Action": "kms:Decrypt",
                   "Effect": "Allow",
-                  "Resource": "arn:aws:kms:eu-west-1:965377249924:key/abcd-efgh",
+                  "Resource": "arn:aws:kms:eu-west-1:555555555555:key/abcd-efgh",
                   "Sid": "KmsRead"
                 }
               ],
@@ -247,7 +247,7 @@
                     "kms:Decrypt"
                   ],
                   "Effect": "Allow",
-                  "Resource": "arn:aws:kms:eu-west-1:965377249924:key/abcd-efgh",
+                  "Resource": "arn:aws:kms:eu-west-1:555555555555:key/abcd-efgh",
                   "Sid": "KmsWrite"
                 }
               ],

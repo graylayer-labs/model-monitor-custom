@@ -69,7 +69,7 @@ Hard 1 rps ceiling that cannot be raised. Bias + explainability + data-quality b
 
 ### 3d. Cross-account topology
 
-Baselines bucket is in `ML_ARTIFACT` (`965377249924`). Model MPG for `example_classifier` is in `DS` (`714462557551`) today (migration TBD — see SYSTEM `Known Gaps`). Clarify's shadow endpoint for SHAP must live in the same account as the Clarify Processing Job. Cross-account plumbing needs at minimum:
+Baselines bucket is in the artifact account (`<ARTIFACT_ACCOUNT_ID>`). Model MPG for `example_classifier` sits in a separate data-science account (`<DS_ACCOUNT_ID>`) today (migration deferred). Clarify's shadow endpoint for SHAP must live in the same account as the Clarify Processing Job. Cross-account plumbing needs at minimum:
 
 1. S3 bucket policy grant on the baselines bucket to the Clarify execution role.
 2. KMS key policy grant on the artifact CMK.

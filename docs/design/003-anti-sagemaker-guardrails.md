@@ -51,10 +51,10 @@ Runs on every PR. Zero tolerance in `containers/`, `cdk/`, `shared/`. Research d
 
 ### 5. Port-header comment
 
-Every file ported from `ml-core` / `ml-iac` gets a header:
+Every file ported from an upstream ml-core / ml-iac repo gets a header:
 
 ```python
-"""Ported from urbanfoxai/ml-core@<sha>:<path> on <date>.
+"""Ported from <upstream-repo>@<sha>:<path> on <date>.
 
 Removed on port:
 - SageMaker execution role assumption

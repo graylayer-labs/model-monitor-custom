@@ -1,105 +1,110 @@
 # Session handoff — model-monitor-custom
 
-Last active: 2026-07-03. Written to survive a Claude restart. Read this file first when resuming.
+Last active: 2026-07-07. Read this first on resume.
 
 ## Where we are
 
-Standalone R&D repo replacing SageMaker Model Monitor + Clarify with own-container / own-math batch analysis on ECS Fargate + Step Functions. Started as a worktree off `ml-iac`; now a full separate repo at `github.com/EoinMcUF/model-monitor-custom`.
+Standalone R&D repo replacing SageMaker Model Monitor + Clarify with own-container / own-math batch analysis on ECS Fargate + Step Functions. Repo: `github.com/EoinMcUF/model-monitor-custom`.
 
 **Phase status (per `docs/ROADMAP.md`):**
 
-- ✅ Phase 0 — scaffolding
-- ✅ Phase 1 — ABCs, schemas, fixtures, CI skeleton
-- ✅ Phase 2 — 3 CDK stacks + base container + first analyser skeleton (wave 1) + SharedIamStack + bias skeleton (wave 2)
-- ✅ Phase 3 — real BiasAnalyser (smclarify) + real ExplainAnalyser (SHAP) + OperationsBaselineStack + DQ/MQ/Shadow skeletons
-- ✅ Phase 5 — real DqAnalyser (KS + PSI + completeness), real MqAnalyser (accuracy/F1/AUC + baseline compare), real ShadowAnalyser (agreement + JS divergence)
-- ✅ Phase 6 — end-to-end runnable example at `examples/adult-classifier/`
-- 🚫 Phase 7 — CDK Pipelines. **Deferred** per ROADMAP (gated on team-size 5+ or first prod deploy). Do not spawn without explicit user ask.
+- ✅ Phase 0–6 — scaffolding, stacks, 5 real analysers, e2e Adult example
+- ✅ **Deploy-prep** — coverage reporting, config-driven 1:N topology, deterministic writer role, per-project producer bucket, analyser build+push script
+- ⏸️ **First real deploy** — everything synth-clean, no `cdk bootstrap` yet. **Waiting on user to pick target account.**
+- 🚫 Phase 7 — CDK Pipelines. Deferred until team ≥5 or first prod deploy.
 
-## What is on `main`
+## What landed since last handoff (2026-07-03 → 2026-07-07)
 
-Last 17 commits are the delivery. `git log --oneline -20` on the repo shows the trail. Key artefacts:
-
-| Path | What it is |
+| PR | What |
 |---|---|
-| `cdk/src/model_monitor_cdk/stacks/artifact_stack.py` | ECR + baselines bucket + KMS, per-consumer grants |
-| `cdk/src/model_monitor_cdk/stacks/shared_iam_stack.py` | N reader roles + 1 writer role (per ADR 008) |
-| `cdk/src/model_monitor_cdk/stacks/inference_monitor_stack.py` | Live analysis: Scheduler → SFN → 5 Fargate branches → DDB + Pipes |
-| `cdk/src/model_monitor_cdk/stacks/operations_baseline_stack.py` | Snapshot analysis: S3 event → SFN → 5 Fargate branches → cross-account write |
-| `containers/base/` | `mmc-base` shared library — env-var contract, ban-list guard, S3/DDB/CW clients, entrypoint, harness |
-| `containers/bias/` | Real BiasAnalyser (smclarify wrapper, Adult parity test) |
-| `containers/explain/` | Real ExplainAnalyser (SHAP + sklearn + XGBoost adapters) |
-| `containers/dq/` | Real DqAnalyser (schema + completeness + KS + PSI drift) |
-| `containers/mq/` | Real MqAnalyser (accuracy/precision/recall/F1 + baseline delta) |
-| `containers/shadow/` | Real ShadowAnalyser (agreement + per-class disagreement + JS divergence) |
-| `examples/adult-classifier/` | Runnable e2e — trains LR on Adult, drives all 5 analysers, writes `docs/e2e-output.md` + plots |
-| `docs/design/001..008` | ADRs — IaC layout, container base, anti-SageMaker guardrails, schema evolution, observability, failure taxonomy, cross-account IAM |
-| `.github/workflows/anti-sagemaker.yml` | CI grep-guard — fails PRs reintroducing SageMaker-shaped code |
+| #18 | pytest-cov in CI (term-missing + xml artefact) |
+| #19 | parametrised env-var contract + analyser-spec failure tests |
+| #20 | assert KMS decrypt, scheduler cron regex, per-branch Catch isolation |
+| #21 | moto-backed tests for archive_writer + notifier (concurrent CCFE race) |
+| #22 | config-driven topology — `accounts.yaml` + `projects.yaml`, `EnvConfig`, `resolve_env_from_context` |
+| #23 | deterministic writer role name, per-project `producer_bucket_arn`, `scripts/build-and-push-analysers.sh`, analyser Dockerfiles ARG'd |
 
-**No worktrees. No open PRs. No open branches other than `main`.** Verify with `git worktree list` and `gh pr list`.
+**Current tip:** `9ec7d0a` on `main`. 132 tests. Coverage report live in CI artefacts.
 
-## Standing rules (do not violate on resume)
+## Critical files added / changed
 
-- **Draft PRs only.** Human flips ready. Never `gh pr ready` without user ask.
-- **Never force-push to main.** Force-push only allowed on feature branches during rebase.
-- **All squad paths under `~/UFX/`.** Worktrees at `<repo>/.worktrees/<slug>/`.
-- **Always `uv run`** for python/pytest/ruff/ty. Never bare `python3`, `pip`, etc.
-- **`claude-br` is a zsh alias**, not a real binary. When launching squads via `tmux send-keys`, either source the alias or expand it: `CLAUDE_CODE_USE_BEDROCK=1 AWS_PROFILE=DS AWS_REGION=eu-west-1 ANTHROPIC_MODEL=eu.anthropic.claude-opus-4-7 claude '<prompt>'`. Bare `claude-br` in a non-interactive shell will fail — bit us on Phase 6.
-- **Squads post as the user in GH.** No "Squad θ says …" branding, no Claude scaffolding in PR bodies. Reviewers are UFX teammates, not you.
-- **PR body is the rolling status, not comments.** No `SHEPHERD ROUND DONE` blocks in GH.
-- **No SageMaker.** CI grep-guard enforces it. Excludes for legit-data files (`ban_list.py`, its test, ADR 003, research docs) already in the workflow.
-- **Merge order matters when squads share `pyproject.toml` (root workspace).** First merges clean; subsequent squads need a rebase — trivial union merge on the `[tool.uv.workspace] members` + `dependencies` lists.
+| Path | What |
+|---|---|
+| `cdk/src/model_monitor_cdk/config.py` | `AccountsConfig` + `ProjectsConfig` + `load_env` + `resolve_env_from_context`. Regex-validated 12-digit account IDs, cross-ref check (project.inference_account must appear in accounts.roles.inference), S3 ARN check on producer bucket |
+| `cdk/environments/accounts.example.yaml` | 1-account collapse example (all three roles = same ID) |
+| `cdk/environments/projects.example.yaml` | requires `producer_bucket_arn` per project |
+| `cdk/environments/{accounts,projects}.yaml` | **gitignored** — user fills locally before deploy |
+| `cdk/app.py` | driven off `EnvConfig`; each stack pinned to `cdk.Environment(account=..., region=...)`; writer ARN reconstructed as `arn:aws:iam::{roles.artifact}:role/mmc-test-baseline-writer` |
+| `cdk/src/model_monitor_cdk/stacks/shared_iam_stack.py` | writer role gets deterministic `role_name=f"mmc-{env}-baseline-writer"` (readers stay auto-named) |
+| `cdk/src/model_monitor_cdk/stacks/{inference_monitor,operations_baseline}_stack.py` | `vpc_id: str \| None` prop — `ec2.Vpc.from_lookup` when set |
+| `scripts/build-and-push-analysers.sh` | buildx x86, base + 5 analysers, `:$SHA` + `:latest`, `--dry-run`, `--allow-dirty`, SSO login hint |
+| `containers/{bias,dq,explain,mq,shadow}/Dockerfile` | `ARG BASE_IMAGE` + `FROM ${BASE_IMAGE}` — script threads real host at build time |
+| `docs/design/009-config-driven-topology.md` | ADR |
+| `README.md` | "First deploy" runbook (6 numbered steps) |
 
-## Squad orchestration — how it went
+## Standing rules (unchanged, do not violate)
 
-Established pattern (repeat this on future waves):
+- **Draft PRs only.** Human flips ready.
+- **Never force-push to main.**
+- **Worktrees at `<repo>/.worktrees/<slug>/`.**
+- **Always `uv run`** for python/pytest/ruff/ty.
+- **`claude-br` is a zsh alias.** In `tmux send-keys` use expanded form: `CLAUDE_CODE_USE_BEDROCK=1 AWS_PROFILE=DS AWS_REGION=eu-west-1 ANTHROPIC_MODEL=eu.anthropic.claude-opus-4-7 claude '<prompt>'`.
+- **Squads never run `gh`, `aws`, `docker`, `cdk deploy`.** Manager (this Claude) owns all external ops.
+- **Squads post as the user in GH.** No squad branding, no Claude scaffolding in PR bodies.
+- **PR body is rolling status.** GH comments only for review-thread replies.
+- **No SageMaker.** CI grep-guard enforces.
+- **Confirm before any AWS-cost action.** `cdk bootstrap`, `cdk deploy`, `ecr push`.
 
-1. Read ROADMAP + relevant ADRs to identify parallel work.
-2. Analyse file-collision — only root `pyproject.toml` and `cdk/app.py` / `stacks/__init__.py` cross squads.
-3. Cap wave at 4 build squads (heavy) or 6 skeletons (light).
-4. Create worktrees at `.worktrees/<slug>/` with `feature/mmc-<slug>` branches.
-5. Write `SQUAD_BRIEF.md` per worktree — mirrors the working ones from Phases 2/3/5/6. Read those for reference before writing new ones.
-6. Spawn window `squad-mmc-<phase>` in tmux session `ufx`. Each pane runs `claude-br` (or expanded form) with a bootstrap prompt.
-7. Cron-poll every 2 min. Approve `Do you want to proceed?` prompts with `1`+Enter.
-8. Manager (this Claude) rebases when squads conflict on shared files, force-pushes, merges after CI green.
-9. On merge: `git worktree remove .worktrees/<slug> --force`, delete local branch, `tmux kill-pane`.
-10. When window empty, `tmux kill-window`. When phase done, `CronDelete <job-id>`.
-
-## Known gotchas hit and mitigated
-
-- **grep-guard trips on legit `ban_list.py`** — fix via pathspec excludes in `.github/workflows/anti-sagemaker.yml`. Already done for `containers/base/src/mmc_base/ban_list.py` + its test. Future analysers that reference the banned tokens as data (unlikely) need the same treatment.
-- **Squads open PR while worktree not on latest main** → CONFLICTING on root `pyproject.toml`. Manager rebases in-place, fixes union of workspace members + deps, force-pushes.
-- **`tmux send-keys "claude-br ..."` fails** because non-interactive shells don't load `.zshrc` aliases. Use expanded env-var form.
-- **Squad prompts stack** — sometimes `Enter` sends prompt text into the pane's input buffer without submitting. Always follow `send-keys "text"` with `send-keys Enter` explicitly.
-
-## Suggested next steps (in priority order)
-
-Not started, up to user which direction:
-
-1. **First real deploy** — the whole system is synth-clean, no CDK bootstrap has happened. Whoever picks this needs to decide target account, bootstrap CDK, push real ECR images (base + 5 analysers + baseline), then `cdk deploy` the stacks in order (Artifact → SharedIam → InferenceMonitor and/or OperationsBaseline). This unblocks Phase 7 (CDK Pipelines) and is the natural next milestone.
-
-2. **Real training-data example.** Adult is a demo. A real UFX-shaped example — session-level data with real drift over time — would validate the analyser math beyond the fixture.
-
-3. **`OperationsBaselineStack` cross-account event flow.** Current shape assumes same-account producer bucket. Real deployment will have the producer in `ml-data` and analysis running in `ml-operations` — needs EventBridge cross-account forwarding.
-
-4. **Container image build + publish CI.** Right now Dockerfiles exist but nothing builds them. Add a GH Actions workflow that builds base + 5 analyser images, tags by git SHA, pushes to ECR on merge to main.
-
-5. **Phase 7 (CDK Pipelines / GH Actions matrix)** — the ROADMAP gate is "team-size 5+ or first prod deploy." Currently 1 person, no prod. Ignore until (1) lands.
-
-## Fastest-path bring-back prompt
-
-Paste this at the top of the next session:
-
-> Resume work on model-monitor-custom. Read /Users/eoinmca/UFX/model-monitor-custom/HANDOFF.md first — it has the full state, standing rules, and priorities. Confirm no dangling worktrees / open PRs / running crons before starting new work. Wait for a direction from me before spawning anything.
-
-## Verification checklist for resume
+## Verification checklist on resume
 
 ```bash
-cd ~/UFX/model-monitor-custom
-git status                       # → clean on main
+cd <repo-root>
+git status                       # → clean on main (docs/e2e-output.md + examples/*/e2e-summary.json may be dirty — regenerated by e2e run, safe to discard)
 git worktree list                # → single row: repo root on main
 gh pr list --state open          # → empty
 tmux list-windows -t ufx 2>/dev/null | grep squad-mmc  # → empty
+uv run pytest -q                 # → 132 passed
 ```
 
-If any of those show unexpected state, investigate before spawning. If they're clean, you're at the exact spot this HANDOFF was written from.
+If any show unexpected state, investigate before spawning.
+
+## Next task — First real deploy
+
+Everything is ready. User needs to pick target account and approve each AWS step. Recommended: single-account collapse (all three roles → same account) for the cheapest blast radius on first deploy.
+
+**Runbook** — replace `<AWS_ACCOUNT_ID>`, `<AWS_PROFILE>`, `<AWS_REGION>`:
+
+1. `cp cdk/environments/accounts.example.yaml cdk/environments/accounts.yaml` — edit: put `<AWS_ACCOUNT_ID>` in all three `roles.*` slots.
+2. `cp cdk/environments/projects.example.yaml cdk/environments/projects.yaml` — edit: real project name, `inference_account: "<AWS_ACCOUNT_ID>"`, `producer_bucket_arn: "arn:aws:s3:::<real-bucket>"`, `schedule: "cron(0 * * * ? *)"`.
+3. `aws sso login --profile <AWS_PROFILE>`
+4. `uv run cdk bootstrap aws://<AWS_ACCOUNT_ID>/<AWS_REGION> --profile <AWS_PROFILE>` — **first AWS-cost step, confirm before running.**
+5. `uv run cdk deploy MMC-Test-Artifact --profile <AWS_PROFILE>` — ECR repos + baselines bucket + KMS. Needed before image push.
+6. `AWS_PROFILE=<AWS_PROFILE> ./scripts/build-and-push-analysers.sh <AWS_ACCOUNT_ID> <AWS_REGION>` — builds + pushes base and 5 analysers.
+7. `uv run cdk deploy MMC-Test-SharedIam --profile <AWS_PROFILE>`
+8. `uv run cdk deploy 'MMC-Test-InferenceMonitor-*' 'MMC-Test-OperationsBaseline-*' --profile <AWS_PROFILE>`
+9. Manual smoke: `aws stepfunctions start-execution` on the InferenceMonitor SFN with a fixture input; watch Fargate task → S3 + DDB writes.
+
+Each step is interactive and produces real AWS resources → **needs user approval per step per behavior.md rules.**
+
+## Follow-ups (deferred, not blocking)
+
+- Update `docs/design/001-iac-layout.md:29` and `docs/research/IAC_DESIGN_RESEARCH.md` — remove stale `-c target_account=` references (config-driven now).
+- CI wiring for `scripts/build-and-push-analysers.sh` — GH Action that builds+pushes on merge to main (out of scope for PR #23).
+- Real domain-shaped example (session-level, real drift) — Adult is a demo.
+- `OperationsBaselineStack` cross-account event flow — current shape assumes same-account producer bucket. Real deployment: producer in a data account, analysis in an ops account → EventBridge cross-account forwarding.
+
+## Squad orchestration cheatsheet
+
+If next task needs parallel work:
+
+1. Cap 4 build squads / 6 shepherd.
+2. Worktrees at `.worktrees/<slug>/`, branches `feature/mmc-<slug>`.
+3. Window `squad-mmc-<phase>` in tmux session `ufx`. Panes run expanded `claude-br` form.
+4. **Active monitoring loop every ~5 min** — `tmux capture-pane` each worker, triage state, nudge quiet squads. Do not passively wait.
+5. Approve `Do you want to proceed?` prompts with `1`+Enter via `send-keys` + explicit `Enter`.
+6. Manager creates PRs from squad DONE blocks — squads never touch `gh`.
+7. On merge: `git worktree remove --force`, delete branch, `tmux kill-pane`. Window empty → `kill-window`.
+
+## Fastest-path resume prompt
+
+> Resume work on model-monitor-custom. Read HANDOFF.md at the repo root first. Verify clean state (worktrees, PRs, tmux). Then wait for direction.

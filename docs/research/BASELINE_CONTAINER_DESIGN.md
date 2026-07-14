@@ -684,8 +684,8 @@ Baseline container role (SageMaker Processing Job execution role) needs, and **o
       "Effect": "Allow",
       "Action": ["s3:GetObject", "s3:ListBucket"],
       "Resource": [
-        "arn:aws:s3:::monitoring-baselines-965377249924-eu-west-1",
-        "arn:aws:s3:::monitoring-baselines-965377249924-eu-west-1/monitoring-baselines/{pkg}/{type}/input/v{N}/*"
+        "arn:aws:s3:::monitoring-baselines-<ARTIFACT_ACCOUNT_ID>-eu-west-1",
+        "arn:aws:s3:::monitoring-baselines-<ARTIFACT_ACCOUNT_ID>-eu-west-1/monitoring-baselines/{pkg}/{type}/input/v{N}/*"
       ]
     },
     {
@@ -693,7 +693,7 @@ Baseline container role (SageMaker Processing Job execution role) needs, and **o
       "Effect": "Allow",
       "Action": ["s3:PutObject", "s3:AbortMultipartUpload"],
       "Resource": [
-        "arn:aws:s3:::monitoring-baselines-965377249924-eu-west-1/monitoring-baselines/{pkg}/{type}/output/v{N}/*"
+        "arn:aws:s3:::monitoring-baselines-<ARTIFACT_ACCOUNT_ID>-eu-west-1/monitoring-baselines/{pkg}/{type}/output/v{N}/*"
       ]
     },
     {
@@ -723,7 +723,7 @@ Baseline container role (SageMaker Processing Job execution role) needs, and **o
       "Sid": "CloudWatchLogsWrite",
       "Effect": "Allow",
       "Action": ["logs:CreateLogStream", "logs:PutLogEvents", "logs:CreateLogGroup"],
-      "Resource": ["arn:aws:logs:eu-west-1:965377249924:log-group:/aws/sagemaker/ProcessingJobs*"]
+      "Resource": ["arn:aws:logs:eu-west-1:<ARTIFACT_ACCOUNT_ID>:log-group:/aws/sagemaker/ProcessingJobs*"]
     },
     {
       "Sid": "EcrPullImage",
@@ -747,14 +747,14 @@ Baseline container role (SageMaker Processing Job execution role) needs, and **o
 
 ### C.3 DS-side grants (transitional — pre-MPG migration)
 
-For the pre-migration era where the model artefact still lives in `DS` (`714462557551`), ML_ARTIFACT (`965377249924`) needs cross-account read on the model. Two options:
+For the pre-migration era where the model artefact still lives in `DS` (`<DS_ACCOUNT_ID>`), ML_ARTIFACT (`<ARTIFACT_ACCOUNT_ID>`) needs cross-account read on the model. Two options:
 
 **Option A — Resource policy on the DS bucket.** Add:
 ```json
 {
   "Sid": "AllowMLArtifactBaselineRead",
   "Effect": "Allow",
-  "Principal": {"AWS": "arn:aws:iam::965377249924:role/Baseline-*"},
+  "Principal": {"AWS": "arn:aws:iam::<ARTIFACT_ACCOUNT_ID>:role/Baseline-*"},
   "Action": ["s3:GetObject"],
   "Resource": "arn:aws:s3:::{ds-model-bucket}/models/example_classifier/{version}/model.tar.gz"
 }
@@ -768,7 +768,7 @@ Plus a matching KMS key policy grant on the DS-side CMK for `kms:Decrypt`.
 ### C.4 ECR image storage + CI/CD
 
 Image lives in **ML_ARTIFACT ECR**, same repo pattern as `model-monitor`:
-- Repo: `965377249924.dkr.ecr.eu-west-1.amazonaws.com/model-baseline`
+- Repo: `<ARTIFACT_ACCOUNT_ID>.dkr.ecr.eu-west-1.amazonaws.com/model-baseline`
 - Tag scheme: `<short-commit-sha>` for every push to `main`; `latest` moves.
 - CDK reads the tag from an SSM param or ECR image lookup — same helper `model-monitor` uses.
 
@@ -792,18 +792,18 @@ jobs:
       - uses: actions/checkout@v4
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::965377249924:role/GH-EcrPush-Baseline
+          role-to-assume: arn:aws:iam::<ARTIFACT_ACCOUNT_ID>:role/GH-EcrPush-Baseline
           aws-region: eu-west-1
       - uses: aws-actions/amazon-ecr-login@v2
       - name: Build + push
         working-directory: containers/model_baseline
         run: |
-          IMAGE_URI=965377249924.dkr.ecr.eu-west-1.amazonaws.com/model-baseline:${{ github.sha }}
+          IMAGE_URI=<ARTIFACT_ACCOUNT_ID>.dkr.ecr.eu-west-1.amazonaws.com/model-baseline:${{ github.sha }}
           docker build -t "$IMAGE_URI" .
           docker push "$IMAGE_URI"
           # Move :latest — CDK reads by digest in prod so this is cosmetic.
-          docker tag "$IMAGE_URI" 965377249924.dkr.ecr.eu-west-1.amazonaws.com/model-baseline:latest
-          docker push 965377249924.dkr.ecr.eu-west-1.amazonaws.com/model-baseline:latest
+          docker tag "$IMAGE_URI" <ARTIFACT_ACCOUNT_ID>.dkr.ecr.eu-west-1.amazonaws.com/model-baseline:latest
+          docker push <ARTIFACT_ACCOUNT_ID>.dkr.ecr.eu-west-1.amazonaws.com/model-baseline:latest
 ```
 
 Adds a scan gate (Trivy or `docker scout`) as a follow-on ticket — copy from `model-monitor` if it has one, otherwise track under `.claude/findings.md`.
@@ -986,7 +986,7 @@ Yes — emit `_provenance.json` alongside `analysis.json`. Shape:
   "model_s3_uri": "s3://.../model.tar.gz",
   "model_etag": "abc...",
   "dataset_row_count": 12045,
-  "container_image_uri": "965377249924.dkr.ecr.eu-west-1.amazonaws.com/model-baseline:<sha>",
+  "container_image_uri": "<ARTIFACT_ACCOUNT_ID>.dkr.ecr.eu-west-1.amazonaws.com/model-baseline:<sha>",
   "container_image_digest": "sha256:...",
   "container_git_commit": "abc1234",
   "smclarify_version": "0.5",
