@@ -24,3 +24,11 @@ roles:
 # collapse — share a VPC across stacks). Omit or leave null to let the
 # stack create its own /16 VPC.
 operations_vpc_id: null
+
+# Optional. Provision a GitHub Actions OIDC role in the artifact account
+# for the `.github/workflows/build-and-push-analysers.yml` workflow.
+# Omit the whole block to skip.
+# github_oidc:
+#   github_repo: "OWNER/model-monitor-custom"
+#   ref_filter: "refs/heads/main"
+#   create_provider: true   # set false if the account already has the provider

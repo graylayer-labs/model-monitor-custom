@@ -99,6 +99,24 @@ class RolesConfig(BaseModel):
         return entries
 
 
+class GithubOidcConfig(BaseModel):
+    """Opt-in GitHub Actions OIDC role deployed in the artifact account.
+
+    Attributes:
+        github_repo: ``owner/repo`` slug allowed to assume the push role.
+        ref_filter: Git ref filter for the ``sub`` claim (default
+            ``refs/heads/main``).
+        create_provider: When ``True`` the stack creates the GitHub OIDC
+            provider. Set ``False`` if the account already has one.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    github_repo: str = Field(min_length=3)
+    ref_filter: str = "refs/heads/main"
+    create_provider: bool = True
+
+
 class AccountsConfig(BaseModel):
     """Top-level accounts.yaml shape.
 
@@ -107,6 +125,8 @@ class AccountsConfig(BaseModel):
         roles: Which account plays which topology role.
         operations_vpc_id: Optional VPC ID for the ml-operations stack to
             adopt (single-account collapse). ``None`` → stack creates its own.
+        github_oidc: Optional block enabling the :class:`GithubOidcStack`
+            in the artifact account. ``None`` → no OIDC role provisioned.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -114,6 +134,7 @@ class AccountsConfig(BaseModel):
     region: str
     roles: RolesConfig
     operations_vpc_id: str | None = None
+    github_oidc: GithubOidcConfig | None = None
 
 
 class ProjectSpec(BaseModel):

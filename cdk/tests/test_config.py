@@ -328,30 +328,33 @@ def test_producer_bucket_arn_non_s3_rejected(tmp_path: Path) -> None:
         load_env(accounts_path, projects_path)
 
 
-def test_producer_account_defaults_to_none(tmp_path: Path) -> None:
+def test_github_oidc_defaults_to_none(tmp_path: Path) -> None:
     accounts_path = _write_yaml(tmp_path / "accounts.yaml", _accounts_payload())
     projects_path = _write_yaml(tmp_path / "projects.yaml", _projects_payload())
     cfg = load_env(accounts_path, projects_path)
-    assert cfg.projects.projects[0].producer_account is None
+    assert cfg.accounts.github_oidc is None
 
 
-def test_producer_account_valid_accepted(tmp_path: Path) -> None:
-    accounts_path = _write_yaml(tmp_path / "accounts.yaml", _accounts_payload())
-    projects_path = _write_yaml(
-        tmp_path / "projects.yaml",
-        _projects_payload(producer_account="999999999999"),
+def test_github_oidc_block_loads(tmp_path: Path) -> None:
+    accounts = _accounts_payload(
+        github_oidc={
+            "github_repo": "OWNER/model-monitor-custom",
+            "ref_filter": "refs/heads/main",
+        },
     )
+    accounts_path = _write_yaml(tmp_path / "accounts.yaml", accounts)
+    projects_path = _write_yaml(tmp_path / "projects.yaml", _projects_payload())
     cfg = load_env(accounts_path, projects_path)
-    assert cfg.projects.projects[0].producer_account == "999999999999"
+    assert cfg.accounts.github_oidc is not None
+    assert cfg.accounts.github_oidc.github_repo == "OWNER/model-monitor-custom"
+    assert cfg.accounts.github_oidc.create_provider is True
 
 
-def test_producer_account_bad_rejected(tmp_path: Path) -> None:
-    accounts_path = _write_yaml(tmp_path / "accounts.yaml", _accounts_payload())
-    projects_path = _write_yaml(
-        tmp_path / "projects.yaml",
-        _projects_payload(producer_account="12"),
-    )
-    with pytest.raises(ValueError, match="producer_account"):
+def test_github_oidc_missing_repo_rejected(tmp_path: Path) -> None:
+    accounts = _accounts_payload(github_oidc={"ref_filter": "refs/heads/main"})
+    accounts_path = _write_yaml(tmp_path / "accounts.yaml", accounts)
+    projects_path = _write_yaml(tmp_path / "projects.yaml", _projects_payload())
+    with pytest.raises(ValueError, match="github_repo"):
         load_env(accounts_path, projects_path)
 
 
