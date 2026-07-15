@@ -127,6 +127,11 @@ class ProjectSpec(BaseModel):
             that this project's training snapshots land in. Used by
             :class:`OperationsBaselineStack` for read grants and the
             EventBridge object-created rule.
+        producer_account: Optional 12-digit ID of the account that owns the
+            producer bucket. ``None`` → same account as the operations stack
+            (single-account collapse). When set and different from the
+            operations account, cross-account event forwarding is provisioned
+            per ADR 010.
         schedule: EventBridge Scheduler cron expression for the tick.
         vpc_id: Optional VPC ID for the inference stack to adopt.
             ``None`` → stack creates its own VPC.
@@ -137,10 +142,32 @@ class ProjectSpec(BaseModel):
     name: str = Field(min_length=1)
     inference_account: str
     producer_bucket_arn: str
+    producer_account: str | None = None
     schedule: str = _DEFAULT_SCHEDULE
     vpc_id: str | None = None
 
     _validate_inference_account = field_validator("inference_account", mode="before")(_validate_account_id)
+
+    @field_validator("producer_account", mode="before")
+    @classmethod
+    def _validate_producer_account(cls, value: object) -> str | None:
+        r"""Allow ``None`` or a 12-digit account ID.
+
+        Args:
+            value: Raw value from YAML.
+
+        Returns:
+            ``None`` or the validated 12-digit ID.
+
+        Raises:
+            ValueError: If value is a non-matching non-None value.
+        """
+        if value is None:
+            return None
+        if not isinstance(value, str) or not _ACCOUNT_ID_PATTERN.match(value):
+            msg = rf"producer_account must be null or match ^\d{{12}}$, got: {value!r}"
+            raise ValueError(msg)
+        return value
 
     @field_validator("producer_bucket_arn", mode="before")
     @classmethod

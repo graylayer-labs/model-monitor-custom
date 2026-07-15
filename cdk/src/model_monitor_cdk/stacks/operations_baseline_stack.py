@@ -101,8 +101,13 @@ class OperationsBaselineStackProps:
         artifact_kms_key_arn: Cross-account KMS key ARN (baselines bucket).
         baseline_writer_role_arn: SharedIamStack writer role; the SFN task
             role assumes this for the cross-account write.
-        producer_bucket_arn: Producer bucket ARN (training snapshots, local
-            to ml-operations).
+        producer_bucket_arn: Producer bucket ARN (training snapshots).
+        producer_account_id: Optional 12-digit ID of the account that owns
+            the producer bucket. When set and different from
+            ``operations_account_id``, the stack adds a resource-based policy
+            on the default EventBridge bus granting ``events:PutEvents`` from
+            that account, enabling cross-account event forwarding (ADR 010).
+            ``None`` → same account (default), no bus policy added.
         producer_prefix: S3 key prefix for the ``Object Created`` filter.
         analyser_image_uris: ECR URIs keyed by analyser type
             (``mq``/``dq``/``bias``/``explain``/``shadow``).
@@ -122,6 +127,7 @@ class OperationsBaselineStackProps:
     artifact_kms_key_arn: str
     baseline_writer_role_arn: str
     producer_bucket_arn: str
+    producer_account_id: str | None = None
     producer_prefix: str = "training-snapshots/"
     analyser_image_uris: dict[str, str] = field(default_factory=dict)
     vpc_id: str | None = None
@@ -162,6 +168,9 @@ class OperationsBaselineStackProps:
             raise ValueError(msg)
         if not self.producer_bucket_arn:
             msg = "producer_bucket_arn must be non-empty"
+            raise ValueError(msg)
+        if self.producer_account_id is not None and not _ACCOUNT_ID_PATTERN.match(self.producer_account_id):
+            msg = f"producer_account_id must be null or 12 digits, got: {self.producer_account_id!r}"
             raise ValueError(msg)
         if not self.producer_prefix:
             msg = "producer_prefix must be non-empty"
@@ -264,6 +273,8 @@ class OperationsBaselineStack(Stack):
         state_machine = self._build_state_machine(env=env, task_defs=task_defs, cluster=cluster)
 
         rule = self._build_event_rule(env=env, state_machine=state_machine)
+
+        self._maybe_grant_cross_account_put_events(env=env)
 
         CfnOutput(self, "StateMachineArn", value=state_machine.state_machine_arn)
         CfnOutput(self, "EventRuleArn", value=rule.rule_arn)
@@ -471,12 +482,43 @@ class OperationsBaselineStack(Stack):
             },
         }
 
+    def _maybe_grant_cross_account_put_events(self, *, env: str) -> None:
+        """Attach a bus policy allowing PutEvents from the producer account.
+
+        No-op unless ``producer_account_id`` is set and differs from
+        ``operations_account_id``. See ADR 010: the producer-account
+        :class:`ProducerEventsStack` forwards S3 events to this account's
+        default bus; that PutEvents call requires an explicit bus policy on
+        the target side.
+
+        Args:
+            env: Deployment environment tag used in the statement id.
+        """
+        producer = self._props.producer_account_id
+        if producer is None or producer == self._props.operations_account_id:
+            return
+        default_bus = events.EventBus.from_event_bus_name(self, "DefaultEventBus", "default")
+        events.CfnEventBusPolicy(
+            self,
+            "AllowCrossAccountPutEvents",
+            event_bus_name=default_bus.event_bus_name,
+            statement_id=f"mmc-{env}-{self._props.project_name}-allow-producer",
+            statement={
+                "Effect": "Allow",
+                "Principal": {"AWS": f"arn:aws:iam::{producer}:root"},
+                "Action": "events:PutEvents",
+                "Resource": default_bus.event_bus_arn,
+            },
+        )
+
     def _build_event_rule(self, *, env: str, state_machine: sfn.StateMachine) -> events.Rule:
         """S3 ``Object Created`` rule → SFN ``StartExecution``.
 
-        Cross-account event forwarding is out of scope for the prototype;
-        the producer bucket ARN is a prop so a multi-account topology can
-        land later without refactor.
+        Matches events on the local default bus. In a cross-account topology
+        the same pattern matches events forwarded here by
+        :class:`~model_monitor_cdk.stacks.producer_events_stack.ProducerEventsStack`
+        (ADR 010); the bus policy granting ``events:PutEvents`` is added by
+        :meth:`_maybe_grant_cross_account_put_events`.
 
         Returns:
             The created EventBridge rule.

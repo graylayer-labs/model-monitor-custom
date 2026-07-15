@@ -9,6 +9,10 @@ from model_monitor_cdk.stacks.operations_baseline_stack import (
     OperationsBaselineStack,
     OperationsBaselineStackProps,
 )
+from model_monitor_cdk.stacks.producer_events_stack import (
+    ProducerEventsStack,
+    ProducerEventsStackProps,
+)
 from model_monitor_cdk.stacks.shared_iam_stack import SharedIamStack, SharedIamStackProps
 
 __all__ = [
@@ -18,6 +22,8 @@ __all__ = [
     "InferenceMonitorStackProps",
     "OperationsBaselineStack",
     "OperationsBaselineStackProps",
+    "ProducerEventsStack",
+    "ProducerEventsStackProps",
     "SharedIamStack",
     "SharedIamStackProps",
 ]

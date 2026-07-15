@@ -328,6 +328,33 @@ def test_producer_bucket_arn_non_s3_rejected(tmp_path: Path) -> None:
         load_env(accounts_path, projects_path)
 
 
+def test_producer_account_defaults_to_none(tmp_path: Path) -> None:
+    accounts_path = _write_yaml(tmp_path / "accounts.yaml", _accounts_payload())
+    projects_path = _write_yaml(tmp_path / "projects.yaml", _projects_payload())
+    cfg = load_env(accounts_path, projects_path)
+    assert cfg.projects.projects[0].producer_account is None
+
+
+def test_producer_account_valid_accepted(tmp_path: Path) -> None:
+    accounts_path = _write_yaml(tmp_path / "accounts.yaml", _accounts_payload())
+    projects_path = _write_yaml(
+        tmp_path / "projects.yaml",
+        _projects_payload(producer_account="999999999999"),
+    )
+    cfg = load_env(accounts_path, projects_path)
+    assert cfg.projects.projects[0].producer_account == "999999999999"
+
+
+def test_producer_account_bad_rejected(tmp_path: Path) -> None:
+    accounts_path = _write_yaml(tmp_path / "accounts.yaml", _accounts_payload())
+    projects_path = _write_yaml(
+        tmp_path / "projects.yaml",
+        _projects_payload(producer_account="12"),
+    )
+    with pytest.raises(ValueError, match="producer_account"):
+        load_env(accounts_path, projects_path)
+
+
 def test_project_direct_validation_error() -> None:
     with pytest.raises(ValidationError):
         AccountsConfig.model_validate(

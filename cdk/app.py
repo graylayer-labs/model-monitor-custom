@@ -21,6 +21,10 @@ from model_monitor_cdk.stacks.operations_baseline_stack import (
     OperationsBaselineStack,
     OperationsBaselineStackProps,
 )
+from model_monitor_cdk.stacks.producer_events_stack import (
+    ProducerEventsStack,
+    ProducerEventsStackProps,
+)
 from model_monitor_cdk.stacks.shared_iam_stack import SharedIamStack, SharedIamStackProps
 
 _ENV_TAG = "test"
@@ -112,11 +116,27 @@ def build_app(app: cdk.App) -> cdk.App:
                 artifact_kms_key_arn=artifact.kms_key.key_arn,
                 baseline_writer_role_arn=writer_role_arn,
                 producer_bucket_arn=project.producer_bucket_arn,
+                producer_account_id=project.producer_account,
                 analyser_image_uris=analyser_images,
                 vpc_id=accounts.operations_vpc_id,
             ),
             env=cdk.Environment(account=roles.operations, region=region),
         )
+
+        if project.producer_account is not None and project.producer_account != roles.operations:
+            ProducerEventsStack(
+                app,
+                f"MMC-{_ENV_TAG.capitalize()}-ProducerEvents-{project.name}",
+                props=ProducerEventsStackProps(
+                    environment=_ENV_TAG,
+                    project_name=project.name,
+                    producer_bucket_arn=project.producer_bucket_arn,
+                    producer_prefix="training-snapshots/",
+                    operations_account_id=roles.operations,
+                    operations_region=region,
+                ),
+                env=cdk.Environment(account=project.producer_account, region=region),
+            )
     return app
 
 

@@ -208,6 +208,31 @@ def test_empty_baselines_bucket_rejected():
         _valid_props(baselines_bucket_arn="")
 
 
+def test_bad_producer_account_rejected():
+    with pytest.raises(ValueError, match="producer_account_id"):
+        _valid_props(producer_account_id="12")
+
+
+def test_no_bus_policy_when_producer_account_matches_ops():
+    template = _synth(_valid_props(producer_account_id=_OPERATIONS_ACCOUNT))
+    assert template.find_resources("AWS::Events::EventBusPolicy") == {}
+
+
+def test_no_bus_policy_when_producer_account_omitted():
+    template = _synth()
+    assert template.find_resources("AWS::Events::EventBusPolicy") == {}
+
+
+def test_bus_policy_added_when_producer_account_differs():
+    producer = "999999999999"
+    template = _synth(_valid_props(producer_account_id=producer))
+    policies = template.find_resources("AWS::Events::EventBusPolicy")
+    assert len(policies) == 1
+    rendered = json.dumps(next(iter(policies.values()))["Properties"])
+    assert "events:PutEvents" in rendered
+    assert f"arn:aws:iam::{producer}:root" in rendered
+
+
 def test_no_hardcoded_account_ids_in_source():
     src = Path(__file__).resolve().parents[2] / "src" / "model_monitor_cdk" / "stacks" / "operations_baseline_stack.py"
     body = src.read_text()

@@ -11,6 +11,12 @@ projects:
     # events in this bucket trigger the OperationsBaselineStack Step Function.
     # Required — no default; the account that produces training data owns it.
     producer_bucket_arn: "arn:aws:s3:::your-training-snapshots-bucket"
+    # Optional. 12-digit ID of the account that owns the producer bucket.
+    # Omit or null → producer lives in the operations account (single-account
+    # collapse). When set and different from operations, a ProducerEventsStack
+    # is provisioned in the producer account to forward S3 events cross-account
+    # per ADR 010.
+    producer_account: null
     # EventBridge Scheduler cron for the inference tick (default: hourly).
     schedule: "cron(0 * * * ? *)"
     # Optional. VPC ID for InferenceMonitorStack to adopt. Omit or null →
