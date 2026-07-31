@@ -50,10 +50,25 @@ def handler(event: dict, context: object) -> dict:  # noqa: ARG001
         - analyser: The analyser type
         - outcome: The outcome (succeeded, failed_handled, etc)
     """
+    # Map lowercase event keys (from Step Functions) to uppercase env var names.
+    # Step Functions Payload sends lowercase; EnvContract expects UPPERCASE.
+    key_mapping = {
+        "project": "PROJECT_NAME",
+        "run_id": "RUN_ID",
+        "analyser_type": "ANALYSER_TYPE",
+        "input_uris_json": "INPUT_URIS_JSON",
+        "output_uri": "OUTPUT_URI",
+        "config_uri": "CONFIG_URI",
+        "environment": "ENVIRONMENT",
+        "variant": "VARIANT",
+    }
+
     # Merge os.environ (static, function-level) with event (per-invocation).
-    # Event keys take precedence.
+    # Event keys take precedence. Map lowercase event keys to uppercase env names.
     merged_env = dict(os.environ)
-    merged_env.update(event)
+    for event_key, env_key in key_mapping.items():
+        if event_key in event:
+            merged_env[env_key] = event[event_key]
 
     # Parse and validate the merged contract.
     env = EnvContract.from_env(merged_env)
