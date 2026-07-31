@@ -22,3 +22,6 @@ projects:
     # Optional. VPC ID for InferenceMonitorStack to adopt. Omit or null →
     # stack creates its own /16 VPC.
     vpc_id: null
+    # Compute backend: "lambda" (default, fully testable in LocalStack) or "ecs"
+    # (legacy Fargate path, kept for real-AWS parity testing).
+    compute_backend: lambda

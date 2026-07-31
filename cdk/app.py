@@ -118,6 +118,7 @@ def build_app(app: cdk.App) -> cdk.App:
                 analyser_image_uris=analyser_images,
                 vpc_id=project.vpc_id,
                 schedule_expression=project.schedule,
+                compute_backend=project.compute_backend,
             ),
             env=cdk.Environment(account=project.inference_account, region=region),
         )
@@ -137,6 +138,7 @@ def build_app(app: cdk.App) -> cdk.App:
                 producer_account_id=project.producer_account,
                 analyser_image_uris=analyser_images,
                 vpc_id=accounts.operations_vpc_id,
+                compute_backend=project.compute_backend,
             ),
             env=cdk.Environment(account=roles.operations, region=region),
         )

@@ -149,6 +149,32 @@ def test_eleven_digit_account_id_rejected(tmp_path: Path) -> None:
         load_env(accounts_path, projects_path)
 
 
+def test_project_spec_defaults_compute_backend_to_lambda(tmp_path: Path) -> None:
+    """ProjectSpec without compute_backend should default to 'lambda'."""
+    accounts_path = _write_yaml(tmp_path / "accounts.yaml", _accounts_payload())
+    projects_path = _write_yaml(tmp_path / "projects.yaml", _projects_payload())
+    cfg = load_env(accounts_path, projects_path)
+    assert cfg.projects.projects[0].compute_backend == "lambda"
+
+
+def test_project_spec_accepts_ecs_compute_backend(tmp_path: Path) -> None:
+    """ProjectSpec should accept explicit compute_backend='ecs'."""
+    accounts_path = _write_yaml(tmp_path / "accounts.yaml", _accounts_payload())
+    projects = _projects_payload(compute_backend="ecs")
+    projects_path = _write_yaml(tmp_path / "projects.yaml", projects)
+    cfg = load_env(accounts_path, projects_path)
+    assert cfg.projects.projects[0].compute_backend == "ecs"
+
+
+def test_project_spec_rejects_invalid_compute_backend(tmp_path: Path) -> None:
+    """ProjectSpec should reject invalid compute_backend values."""
+    accounts_path = _write_yaml(tmp_path / "accounts.yaml", _accounts_payload())
+    projects = _projects_payload(compute_backend="fargate")  # invalid
+    projects_path = _write_yaml(tmp_path / "projects.yaml", projects)
+    with pytest.raises(ValueError, match=r"compute_backend"):
+        load_env(accounts_path, projects_path)
+
+
 def test_thirteen_digit_account_id_rejected(tmp_path: Path) -> None:
     payload = _accounts_payload()
     payload["roles"]["inference"] = ["1111111111112"]

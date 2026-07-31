@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
@@ -27,6 +27,8 @@ if TYPE_CHECKING:
 _ACCOUNT_ID_PATTERN = re.compile(r"^\d{12}$")
 _S3_BUCKET_ARN_PATTERN = re.compile(r"^arn:aws:s3:::[a-z0-9][a-z0-9.-]*[a-z0-9]$")
 _DEFAULT_SCHEDULE = "cron(0 * * * ? *)"
+
+ComputeBackend = Literal["lambda", "ecs"]
 
 
 def _validate_account_id(value: object, info: ValidationInfo) -> str:
@@ -156,6 +158,9 @@ class ProjectSpec(BaseModel):
         schedule: EventBridge Scheduler cron expression for the tick.
         vpc_id: Optional VPC ID for the inference stack to adopt.
             ``None`` → stack creates its own VPC.
+        compute_backend: Compute backend for the analysers: ``"lambda"`` (default,
+            fully LocalStack-testable) or ``"ecs"`` (legacy Fargate path, kept for
+            real-AWS parity testing).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -166,6 +171,7 @@ class ProjectSpec(BaseModel):
     producer_account: str | None = None
     schedule: str = _DEFAULT_SCHEDULE
     vpc_id: str | None = None
+    compute_backend: ComputeBackend = "lambda"
 
     _validate_inference_account = field_validator("inference_account", mode="before")(_validate_account_id)
 
