@@ -1,0 +1,3 @@
+{
+  "app": "python -m tests.e2e.localstack_app"
+}
