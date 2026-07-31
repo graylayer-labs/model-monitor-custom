@@ -11,20 +11,15 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime
-from pathlib import Path
 
 from aws_lambda_powertools import Logger
 
-from mmc_base import failure, io_cw, io_ddb, io_s3, provenance
-from mmc_base.contract import AnalyserInputs, AnalyserOutput, EnvContract, Outcome, Severity
+from mmc_base.contract import EnvContract
 from mmc_base.entrypoint import (
     _emit_failure as entrypoint_emit_failure,
     _emit_success as entrypoint_emit_success,
-    _import_analyser,
     _run_analyser as entrypoint_run_analyser,
-    _validate_output,
     INPUT_DIR,
-    ANALYSER_MODULE_ENV,
 )
 
 logger = Logger(service="mmc-lambda-handler")

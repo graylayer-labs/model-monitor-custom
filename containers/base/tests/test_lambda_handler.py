@@ -6,7 +6,6 @@ import inspect
 from unittest.mock import MagicMock
 from uuid import UUID
 
-import pytest
 from moto import mock_aws
 
 
@@ -35,7 +34,6 @@ def test_lambda_handler_with_sfn_payload():
     import boto3
 
     from mmc_base.lambda_handler import handler
-    from mmc_base.testing import NoopAnalyser, run_container_flow
 
     # Set region for boto3 clients throughout the test
     os.environ["AWS_DEFAULT_REGION"] = "eu-west-1"
@@ -43,7 +41,6 @@ def test_lambda_handler_with_sfn_payload():
     # Set up mocked AWS resources
     s3 = boto3.client("s3", region_name="eu-west-1")
     ddb = boto3.client("dynamodb", region_name="eu-west-1")
-    cw = boto3.client("cloudwatch", region_name="eu-west-1")
 
     # Create mocked S3 buckets
     s3.create_bucket(
@@ -94,7 +91,7 @@ def test_lambda_handler_with_sfn_payload():
     # The handler will fail trying to run analysis (missing env vars), but the
     # important thing is it doesn't fail on "field required" errors from EnvContract.
     try:
-        result = handler(event, context)
+        handler(event, context)
     except Exception as e:
         # If we got a RuntimeError about missing env vars, the key mapping worked!
         # (We got past EnvContract validation, which proves the lowercase keys

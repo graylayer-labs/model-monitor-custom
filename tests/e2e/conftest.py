@@ -91,7 +91,6 @@ def localstack_resources(localstack_up, build_analyser_images):
 
     # Create KMS key
     key_resp = kms.create_key(Description="MMC test key")
-    key_id = key_resp["KeyMetadata"]["KeyId"]
     key_arn = key_resp["KeyMetadata"]["Arn"]
 
     # Create baselines bucket

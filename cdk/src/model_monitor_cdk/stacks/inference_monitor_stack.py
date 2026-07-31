@@ -635,7 +635,11 @@ class InferenceMonitorStack(Stack):
             ],
         }
 
-        definition_obj = {"Comment": f"mmc-{env} 5-way parallel analyser runner (Lambda backend)", "StartAt": "AllAnalysers", "States": {"AllAnalysers": parallel_state}}
+        definition_obj = {
+            "Comment": f"mmc-{env} 5-way parallel analyser runner (Lambda backend)",
+            "StartAt": "AllAnalysers",
+            "States": {"AllAnalysers": parallel_state},
+        }
         definition_text = json.dumps(definition_obj)
 
         state_machine = sfn.StateMachine(

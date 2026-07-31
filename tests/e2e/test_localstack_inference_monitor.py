@@ -139,4 +139,7 @@ def test_full_inference_monitor_fan_out(localstack_resources):
 
     # Verify we have one outcome per analyser
     expected_analysers = {"mq", "dq", "bias", "explain", "shadow"}
-    assert set(analyser_outcomes.keys()) == expected_analysers, f"Got analysers {set(analyser_outcomes.keys())}, expected {expected_analysers}"
+    actual_analysers = set(analyser_outcomes.keys())
+    assert (
+        actual_analysers == expected_analysers
+    ), f"Got analysers {actual_analysers}, expected {expected_analysers}"
