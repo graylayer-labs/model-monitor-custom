@@ -139,6 +139,56 @@ class AccountsConfig(BaseModel):
     github_oidc: GithubOidcConfig | None = None
 
 
+class EndpointConfig(BaseModel):
+    """Configuration for one SageMaker endpoint under monitoring.
+
+    Attributes:
+        name: Endpoint name (used in schedules and metrics).
+        schedule: EventBridge Scheduler cron for monitoring ticks (default: hourly).
+        shadow_variant: Optional shadow-variant name for Shadow analyser.
+            ``None`` → Shadow disabled for this endpoint.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1)
+    schedule: str = _DEFAULT_SCHEDULE
+    shadow_variant: str | None = None
+
+
+class GroundTruthConfig(BaseModel):
+    """Configuration for ground-truth join in Model Quality monitoring.
+
+    Attributes:
+        lookback: How far back to search for late labels (e.g., "7d", "14d").
+        min_coverage: Minimum join coverage (0.0–1.0) to avoid INSUFFICIENT_DATA.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    lookback: str = "7d"
+    min_coverage: float = Field(default=0.30, ge=0.0, le=1.0)
+
+
+class MonitorConfig(BaseModel):
+    """Configuration for one analyser monitor (mq, dq, bias, explain, shadow).
+
+    Attributes:
+        enabled: Whether this monitor runs at all for this project.
+        required: Whether missing artifacts hard-fail (True) or warn (False) at baseline.
+            Ignored if ``enabled=False``.
+        ground_truth: (Model Quality only) Ground-truth join configuration.
+        thresholds: Per-monitor threshold dict (schema varies by monitor type).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    required: bool = False
+    ground_truth: GroundTruthConfig | None = None
+    thresholds: dict = Field(default_factory=dict)
+
+
 class ProjectSpec(BaseModel):
     """One monitored project (model / silo).
 
@@ -155,12 +205,16 @@ class ProjectSpec(BaseModel):
             (single-account collapse). When set and different from the
             operations account, cross-account event forwarding is provisioned
             per ADR 010.
-        schedule: EventBridge Scheduler cron expression for the tick.
+        schedule: EventBridge Scheduler cron expression for the tick (v1 compat).
         vpc_id: Optional VPC ID for the inference stack to adopt.
             ``None`` → stack creates its own VPC.
         compute_backend: Compute backend for the analysers: ``"lambda"`` (default,
             fully LocalStack-testable) or ``"ecs"`` (legacy Fargate path, kept for
             real-AWS parity testing).
+        endpoints: (v2) List of SageMaker endpoints under monitoring, each with
+            schedule and optional shadow variant. When present, overrides schedule.
+        monitors: (v2) Dict of monitor configs (mq, dq, bias, explain, shadow),
+            with enabled/required gating and per-monitor thresholds.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -172,6 +226,8 @@ class ProjectSpec(BaseModel):
     schedule: str = _DEFAULT_SCHEDULE
     vpc_id: str | None = None
     compute_backend: ComputeBackend = "lambda"
+    endpoints: list[EndpointConfig] = Field(default_factory=list)
+    monitors: dict[str, MonitorConfig] = Field(default_factory=dict)
 
     _validate_inference_account = field_validator("inference_account", mode="before")(_validate_account_id)
 
