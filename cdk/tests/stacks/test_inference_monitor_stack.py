@@ -382,3 +382,14 @@ def test_ecs_backend_still_works():
     text = _flatten_definition(raw)
     assert "ecs:runTask" in text
     assert "lambda:invoke" not in text
+
+
+def test_enable_event_wiring_false_removes_scheduler_and_pipes():
+    """When enable_event_wiring=False, no Scheduler or Pipes resources should be created."""
+    template = _synth(_valid_props(compute_backend="lambda", enable_event_wiring=False))
+    # Should have no EventBridge Scheduler resources
+    schedulers = template.find_resources("AWS::Scheduler::Schedule")
+    assert len(schedulers) == 0
+    # Should have no EventBridge Pipes resources
+    pipes = template.find_resources("AWS::Pipes::Pipe")
+    assert len(pipes) == 0

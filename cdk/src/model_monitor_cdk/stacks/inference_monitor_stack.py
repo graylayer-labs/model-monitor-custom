@@ -91,6 +91,9 @@ class InferenceMonitorStackProps:
             (``mq``/``dq``/``bias``/``explain``/``shadow``).
         schedule_expression: EventBridge Scheduler cron for the tick.
         compute_backend: Compute backend (``"lambda"`` or ``"ecs"``).
+        enable_event_wiring: When ``False``, skip EventBridge Scheduler and Pipes
+            creation (useful for LocalStack testing, which doesn't support Pro-tier
+            features). Default ``True`` for real AWS.
         fargate_cpu: vCPU units for each analyser task (ECS only).
         fargate_memory_mib: Memory (MiB) for each analyser task (ECS only).
         lambda_memory_mib: Memory (MiB) for each analyser Lambda (Lambda only).
@@ -113,6 +116,7 @@ class InferenceMonitorStackProps:
     vpc_id: str | None = None
     schedule_expression: str = "cron(0 * * * ? *)"
     compute_backend: ComputeBackend = "lambda"
+    enable_event_wiring: bool = True
     fargate_cpu: int = 1024
     fargate_memory_mib: int = 4096
     lambda_memory_mib: int = 3008
@@ -292,25 +296,29 @@ class InferenceMonitorStack(Stack):
                 lambda_functions=lambda_functions,
             )
 
-        self._build_scheduler(env=env, state_machine=state_machine)
+        # EventBridge Scheduler and Pipes are Pro-tier only in LocalStack.
+        # Gate them behind enable_event_wiring for local testing.
+        if props.enable_event_wiring:
+            self._build_scheduler(env=env, state_machine=state_machine)
 
-        notifier_fn, notifier_pipe = self._build_notifier_pipe(
-            env=env,
-            outcomes_table=outcomes_table,
-        )
-        _archive_fn, archive_pipe = self._build_archive_pipe(
-            env=env,
-            outcomes_table=outcomes_table,
-            archive_bucket=archive_bucket,
-        )
+            notifier_fn, notifier_pipe = self._build_notifier_pipe(
+                env=env,
+                outcomes_table=outcomes_table,
+            )
+            _archive_fn, archive_pipe = self._build_archive_pipe(
+                env=env,
+                outcomes_table=outcomes_table,
+                archive_bucket=archive_bucket,
+            )
+
+            CfnOutput(self, "NotifierLambdaArn", value=notifier_fn.function_arn)
+            CfnOutput(self, "NotifierPipeName", value=notifier_pipe.ref)
+            CfnOutput(self, "ArchivePipeName", value=archive_pipe.ref)
 
         CfnOutput(self, "StateMachineArn", value=state_machine.state_machine_arn)
         CfnOutput(self, "OutcomesTableName", value=outcomes_table.table_name)
         CfnOutput(self, "OutcomesStreamArn", value=outcomes_table.table_stream_arn or "")
-        CfnOutput(self, "NotifierLambdaArn", value=notifier_fn.function_arn)
         CfnOutput(self, "ArchiveBucketName", value=archive_bucket.bucket_name)
-        CfnOutput(self, "NotifierPipeName", value=notifier_pipe.ref)
-        CfnOutput(self, "ArchivePipeName", value=archive_pipe.ref)
 
     def _build_log_groups(self, env: str) -> dict[str, logs.LogGroup]:
         """Create ``/mmc/<env>/<analyser>`` log groups per ADR 006.
