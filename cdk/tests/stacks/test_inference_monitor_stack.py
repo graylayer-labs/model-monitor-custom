@@ -393,3 +393,22 @@ def test_enable_event_wiring_false_removes_scheduler_and_pipes():
     # Should have no EventBridge Pipes resources
     pipes = template.find_resources("AWS::Pipes::Pipe")
     assert len(pipes) == 0
+
+
+def test_custom_image_source_hook_bypasses_ecr_validation():
+    """When analyser_image_source hook is provided, ECR URI validation should be skipped."""
+    # Just verify that validation doesn't raise an error when hook is set.
+    # The hook itself won't be called in this test, just proving validation is skipped.
+    from unittest.mock import MagicMock
+
+    def dummy_hook(analyser: str) -> MagicMock:
+        raise AssertionError(f"Hook should not be called in validation test: {analyser}")
+
+    # This should not raise during construction (validation should be skipped)
+    props = _valid_props(
+        compute_backend="lambda",
+        analyser_image_uris={a: "not-an-ecr-uri" for a in _ANALYSERS},
+        analyser_image_source=dummy_hook,
+    )
+    # Validation passed without error
+    assert props.analyser_image_source is not None

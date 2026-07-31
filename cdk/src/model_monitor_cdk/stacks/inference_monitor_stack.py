@@ -159,6 +159,10 @@ class InferenceMonitorStackProps:
         Raises:
             ValueError: If keys are missing/extra or a URI isn't an ECR URI.
         """
+        # Skip validation if using a custom image source hook (e.g., for LocalStack tests)
+        if self.analyser_image_source is not None:
+            return
+
         missing = self._REQUIRED_ANALYSERS - set(self.analyser_image_uris)
         if missing:
             msg = f"analyser_image_uris missing keys: {sorted(missing)}"
