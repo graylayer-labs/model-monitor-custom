@@ -11,7 +11,9 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, ClassVar, Literal
+from typing import Any, Callable, ClassVar, Literal
+
+from model_monitor_cdk.config import ComputeBackend
 
 from aws_cdk import (
     CfnOutput,
@@ -25,6 +27,9 @@ from aws_cdk import (
 )
 from aws_cdk import (
     aws_ec2 as ec2,
+)
+from aws_cdk import (
+    aws_ecr as ecr,
 )
 from aws_cdk import (
     aws_ecs as ecs,
@@ -85,10 +90,15 @@ class InferenceMonitorStackProps:
         analyser_image_uris: ECR URIs keyed by analyser type
             (``mq``/``dq``/``bias``/``explain``/``shadow``).
         schedule_expression: EventBridge Scheduler cron for the tick.
-        fargate_cpu: vCPU units for each analyser task.
-        fargate_memory_mib: Memory (MiB) for each analyser task.
+        compute_backend: Compute backend (``"lambda"`` or ``"ecs"``).
+        fargate_cpu: vCPU units for each analyser task (ECS only).
+        fargate_memory_mib: Memory (MiB) for each analyser task (ECS only).
+        lambda_memory_mib: Memory (MiB) for each analyser Lambda (Lambda only).
+        lambda_timeout_seconds: Timeout in seconds for each analyser Lambda (Lambda only).
         sfn_retry_max_attempts: Max retries per Parallel branch.
         sfn_retry_backoff_seconds: IntervalSeconds seed for exponential backoff.
+        analyser_image_source: Optional callable to override ECR image source
+            (used in tests to build local Docker assets instead).
     """
 
     _REQUIRED_ANALYSERS: ClassVar[frozenset[str]] = frozenset(_ANALYSER_TYPES)
@@ -102,10 +112,14 @@ class InferenceMonitorStackProps:
     analyser_image_uris: dict[str, str] = field(default_factory=dict)
     vpc_id: str | None = None
     schedule_expression: str = "cron(0 * * * ? *)"
+    compute_backend: ComputeBackend = "lambda"
     fargate_cpu: int = 1024
     fargate_memory_mib: int = 4096
+    lambda_memory_mib: int = 3008
+    lambda_timeout_seconds: int = 300
     sfn_retry_max_attempts: int = 3
     sfn_retry_backoff_seconds: int = 30
+    analyser_image_source: Callable[[str], lambda_.DockerImageCode] | None = None
 
     def __post_init__(self) -> None:
         """Validate props at construction."""
@@ -164,6 +178,12 @@ class InferenceMonitorStackProps:
             raise ValueError(msg)
         if self.fargate_memory_mib <= 0:
             msg = "fargate_memory_mib must be positive"
+            raise ValueError(msg)
+        if self.lambda_memory_mib <= 0:
+            msg = "lambda_memory_mib must be positive"
+            raise ValueError(msg)
+        if self.lambda_timeout_seconds <= 0:
+            msg = "lambda_timeout_seconds must be positive"
             raise ValueError(msg)
         if self.sfn_retry_max_attempts < 0:
             msg = "sfn_retry_max_attempts must be non-negative"
@@ -232,29 +252,45 @@ class InferenceMonitorStack(Stack):
             removal_policy=RemovalPolicy.RETAIN,
         )
 
-        vpc: ec2.IVpc = (
-            ec2.Vpc.from_lookup(self, "AnalyserVpc", vpc_id=props.vpc_id)
-            if props.vpc_id
-            else ec2.Vpc(self, "AnalyserVpc", max_azs=2, nat_gateways=0)
-        )
-        cluster = ecs.Cluster(
-            self,
-            "AnalyserCluster",
-            cluster_name=f"mmc-{env}-inference",
-            vpc=vpc,
-            enable_fargate_capacity_providers=True,
-        )
-
         log_groups = self._build_log_groups(env)
-        task_defs = self._build_task_definitions(
-            env=env,
-            outcomes_table=outcomes_table,
-            baselines_bucket=baselines_bucket,
-            kms_key=kms_key,
-            log_groups=log_groups,
-        )
 
-        state_machine = self._build_state_machine(env=env, task_defs=task_defs, cluster=cluster)
+        if props.compute_backend == "ecs":
+            vpc: ec2.IVpc = (
+                ec2.Vpc.from_lookup(self, "AnalyserVpc", vpc_id=props.vpc_id)
+                if props.vpc_id
+                else ec2.Vpc(self, "AnalyserVpc", max_azs=2, nat_gateways=0)
+            )
+            cluster = ecs.Cluster(
+                self,
+                "AnalyserCluster",
+                cluster_name=f"mmc-{env}-inference",
+                vpc=vpc,
+                enable_fargate_capacity_providers=True,
+            )
+            task_defs = self._build_task_definitions(
+                env=env,
+                outcomes_table=outcomes_table,
+                baselines_bucket=baselines_bucket,
+                kms_key=kms_key,
+                log_groups=log_groups,
+            )
+            state_machine = self._build_state_machine_ecs(
+                env=env,
+                task_defs=task_defs,
+                cluster=cluster,
+            )
+        else:  # lambda
+            lambda_functions = self._build_lambda_functions(
+                env=env,
+                outcomes_table=outcomes_table,
+                baselines_bucket=baselines_bucket,
+                kms_key=kms_key,
+                log_groups=log_groups,
+            )
+            state_machine = self._build_state_machine_lambda(
+                env=env,
+                lambda_functions=lambda_functions,
+            )
 
         self._build_scheduler(env=env, state_machine=state_machine)
 
@@ -292,6 +328,83 @@ class InferenceMonitorStack(Stack):
             )
             for analyser in _ANALYSER_TYPES
         }
+
+    def _build_lambda_functions(
+        self,
+        *,
+        env: str,
+        outcomes_table: dynamodb.ITable,
+        baselines_bucket: s3.IBucket,
+        kms_key: kms.IKey,
+        log_groups: dict[str, logs.LogGroup],
+    ) -> dict[str, lambda_.DockerImageFunction]:
+        """One Lambda function per analyser, with a least-privilege execution role.
+
+        Returns:
+            Lambda function keyed by analyser type.
+        """
+        props = self._props
+        fns: dict[str, lambda_.DockerImageFunction] = {}
+        for analyser in _ANALYSER_TYPES:
+            # Create execution role for Lambda.
+            exec_role = iam.Role(
+                self,
+                f"LambdaExecRole{analyser.title()}",
+                assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),  # ty: ignore[invalid-argument-type]
+                description=f"Lambda execution role for mmc {analyser} analyser",
+            )
+            baselines_bucket.grant_read(exec_role)
+            baselines_bucket.grant_put(exec_role)
+            outcomes_table.grant(exec_role, "dynamodb:PutItem", "dynamodb:UpdateItem")
+            kms_key.grant_decrypt(exec_role)
+            exec_role.add_to_principal_policy(
+                iam.PolicyStatement(
+                    actions=["cloudwatch:PutMetricData"],
+                    resources=["*"],
+                    conditions={"StringEquals": {"cloudwatch:namespace": "mmc/analyser/v1"}},
+                ),
+            )
+
+            # Get the image source (default: ECR, override in tests for local builds).
+            if props.analyser_image_source is not None:
+                image_code = props.analyser_image_source(analyser)
+            else:
+                # Parse ECR URI and build image code from ECR.
+                uri = props.analyser_image_uris[analyser]
+                # URI format: <account>.dkr.ecr.<region>.amazonaws.com/<repo>:<tag>
+                parts = uri.split("/", 1)
+                host = parts[0]
+                repo_and_tag = parts[1]
+                host_parts = host.split(".")
+                region = host_parts[3]
+                repo_name = repo_and_tag.split(":")[0]
+                tag = repo_and_tag.split(":", 1)[1] if ":" in repo_and_tag else "latest"
+
+                artifact_account = props.artifact_account_id
+                repo = ecr.Repository.from_repository_arn(
+                    self,
+                    f"EcrRepo{analyser.title()}",
+                    f"arn:aws:ecr:{region}:{artifact_account}:repository/{repo_name}",
+                )
+                image_code = lambda_.DockerImageCode.from_ecr(repository=repo, tag_or_digest=tag)
+
+            fn = lambda_.DockerImageFunction(
+                self,
+                f"Analyser{analyser.title()}",
+                code=image_code,
+                role=exec_role,  # ty: ignore[invalid-argument-type]
+                function_name=f"mmc-{env}-{analyser}",
+                memory_size=props.lambda_memory_mib,
+                timeout=Duration.seconds(props.lambda_timeout_seconds),
+                environment={
+                    "OUTCOMES_TABLE_NAME": outcomes_table.table_name,
+                    "ENVIRONMENT": env,
+                    "MMC_ANALYSER_MODULE": _ANALYSER_MODULES[analyser],
+                },
+                log_retention=logs.RetentionDays.TWO_WEEKS,
+            )
+            fns[analyser] = fn
+        return fns
 
     def _build_task_definitions(
         self,
@@ -352,7 +465,7 @@ class InferenceMonitorStack(Stack):
             defs[analyser] = task_def
         return defs
 
-    def _build_state_machine(
+    def _build_state_machine_ecs(
         self,
         *,
         env: str,
@@ -466,6 +579,130 @@ class InferenceMonitorStack(Stack):
             "StartAt": f"Run{analyser.title()}",
             "States": {
                 f"Run{analyser.title()}": run_task_state,
+                f"Branch{analyser.title()}Failed": failed_state,
+            },
+        }
+
+    def _build_state_machine_lambda(
+        self,
+        *,
+        env: str,
+        lambda_functions: dict[str, lambda_.DockerImageFunction],
+    ) -> sfn.StateMachine:
+        """SFN Standard with a Parallel of five per-analyser Lambda invoke branches.
+
+        Each branch owns its own Retry + Catch so a single-analyser failure
+        never fails the whole run. Written via a raw Chain built from a
+        Pass state — the Parallel is expressed as a JSONPath definition
+        substitution so branch shape stays inspectable in tests.
+
+        Returns:
+            The created state machine.
+        """
+        props = self._props
+        branches: list[dict[str, Any]] = []
+        for analyser in _ANALYSER_TYPES:
+            branch = self._lambda_branch_definition(
+                analyser=analyser,
+                fn=lambda_functions[analyser],
+                env=env,
+            )
+            branches.append(branch)
+
+        parallel_state = {
+            "Type": "Parallel",
+            "End": True,
+            "Branches": branches,
+            "Retry": [
+                {
+                    "ErrorEquals": ["States.ALL"],
+                    "IntervalSeconds": props.sfn_retry_backoff_seconds,
+                    "MaxAttempts": props.sfn_retry_max_attempts,
+                    "BackoffRate": 2.0,
+                }
+            ],
+        }
+
+        definition_obj = {"Comment": f"mmc-{env} 5-way parallel analyser runner (Lambda backend)", "StartAt": "AllAnalysers", "States": {"AllAnalysers": parallel_state}}
+        definition_text = json.dumps(definition_obj)
+
+        state_machine = sfn.StateMachine(
+            self,
+            "AnalyserStateMachine",
+            state_machine_name=f"mmc-{env}-inference-analysers",
+            definition_body=sfn.ChainDefinitionBody.from_string(definition_text),
+        )
+        return state_machine
+
+    def _lambda_branch_definition(
+        self,
+        *,
+        analyser: str,
+        fn: lambda_.DockerImageFunction,
+        env: str,
+    ) -> dict[str, Any]:
+        """ASL definition for a single Lambda-invoke branch.
+
+        Args:
+            analyser: Analyser type (mq/dq/bias/explain/shadow).
+            fn: The Lambda function to invoke.
+            env: Environment tag.
+
+        Returns:
+            A dict representing the branch (StartAt, States dict).
+        """
+        invoke_state = {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+                "FunctionName": fn.function_arn,
+                "Payload": {
+                    "project.$": "$.project",
+                    "run_id.$": "$.run_id",
+                    "analyser_type": analyser,
+                    "input_uris_json.$": "$.input_uris_json",
+                    "output_uri.$": "$.output_uri",
+                    "config_uri.$": "$.config_uri",
+                    "environment": env,
+                    "variant.$": "$.variant",
+                },
+            },
+            "ResultSelector": {"result.$": "$.Payload"},
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException",
+                        "Lambda.SdkClientException",
+                        "States.TaskFailed",
+                    ],
+                    "IntervalSeconds": self._props.sfn_retry_backoff_seconds,
+                    "MaxAttempts": self._props.sfn_retry_max_attempts,
+                    "BackoffRate": 2.0,
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": ["States.ALL"],
+                    "Next": f"Branch{analyser.title()}Failed",
+                    "ResultPath": "$.error",
+                }
+            ],
+            "Next": f"Branch{analyser.title()}Succeeded",
+        }
+        succeeded_state = {"Type": "Pass", "End": True}
+        failed_state = {
+            "Type": "Pass",
+            "Result": {"analyser": analyser, "outcome": "branch_failed"},
+            "ResultPath": "$.branch_failure",
+            "End": True,
+        }
+
+        return {
+            "StartAt": f"Run{analyser.title()}",
+            "States": {
+                f"Run{analyser.title()}": invoke_state,
+                f"Branch{analyser.title()}Succeeded": succeeded_state,
                 f"Branch{analyser.title()}Failed": failed_state,
             },
         }

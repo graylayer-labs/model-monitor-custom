@@ -97,7 +97,7 @@ def _flatten_definition(defn: Any) -> str:
 
 
 def test_state_machine_parallel_with_five_branches():
-    template = _synth()
+    template = _synth(_valid_props(compute_backend="ecs"))
     sms = template.find_resources("AWS::StepFunctions::StateMachine")
     assert len(sms) == 1
     raw = next(iter(sms.values()))["Properties"].get("DefinitionString") or next(iter(sms.values()))["Properties"].get(
@@ -111,7 +111,7 @@ def test_state_machine_parallel_with_five_branches():
 
 
 def test_five_task_definitions_one_per_analyser():
-    template = _synth()
+    template = _synth(_valid_props(compute_backend="ecs"))
     task_defs = template.find_resources("AWS::ECS::TaskDefinition")
     assert len(task_defs) == 5
     families = sorted(r["Properties"]["Family"] for r in task_defs.values())
@@ -257,7 +257,7 @@ def test_scheduler_rejects_five_field_cron_at_synth_time_via_validator():
 
 def test_task_role_policy_grants_kms_decrypt_on_artifact_key():
     """Each Fargate task role must be able to decrypt objects encrypted by the artifact KMS key."""
-    template = _synth()
+    template = _synth(_valid_props(compute_backend="ecs"))
     key_arn = f"arn:aws:kms:eu-west-1:{_ARTIFACT_ACCOUNT}:key/abcd1234"
     for analyser in _ANALYSERS:
         template.has_resource_properties(
@@ -326,3 +326,59 @@ def test_each_parallel_branch_catches_to_distinct_failure_state():
     assert len(set(catch_targets)) == 5, f"Catch targets not distinct: {catch_targets}"
     expected = {f"Branch{a.title()}Failed" for a in _ANALYSERS}
     assert set(catch_targets) == expected
+
+
+def test_synth_ok_with_lambda_backend():
+    """Lambda backend should synth without errors."""
+    _synth(_valid_props(compute_backend="lambda"))
+
+
+def test_lambda_backend_has_zero_ecs_resources():
+    """Lambda backend should have no ECS task definitions or VPCs."""
+    template = _synth(_valid_props(compute_backend="lambda"))
+    task_defs = template.find_resources("AWS::ECS::TaskDefinition")
+    assert len(task_defs) == 0
+    vpcs = template.find_resources("AWS::EC2::VPC")
+    assert len(vpcs) == 0
+
+
+def test_lambda_backend_has_five_lambda_functions():
+    """Lambda backend should create 5 Lambda functions (one per analyser)."""
+    template = _synth(_valid_props(compute_backend="lambda"))
+    functions = template.find_resources("AWS::Lambda::Function")
+    # Note: there may be other Lambdas (notifier, archive_writer, etc), so check
+    # that at least the 5 analyser Lambdas exist by looking for the naming pattern
+    names = {r["Properties"].get("FunctionName", "") for r in functions.values()}
+    analyser_functions = {n for n in names if any(a in n for a in _ANALYSERS)}
+    assert len(analyser_functions) >= 5, f"Expected ≥5 analyser Lambdas, got: {analyser_functions}"
+
+
+def test_lambda_backend_state_machine_invokes_lambda():
+    """Lambda backend state machine should invoke Lambda (not ECS RunTask)."""
+    template = _synth(_valid_props(compute_backend="lambda"))
+    sms = template.find_resources("AWS::StepFunctions::StateMachine")
+    raw = next(iter(sms.values()))["Properties"].get("DefinitionString") or next(iter(sms.values()))["Properties"].get(
+        "DefinitionBody"
+    )
+    text = _flatten_definition(raw)
+    assert "lambda:invoke" in text
+    # Each Lambda task has 1 Retry + Parallel has 1 Retry = at least 5 (one per branch)
+    assert text.count('"Retry"') >= 5
+    assert text.count('"Catch"') == 5
+
+
+def test_ecs_backend_still_works():
+    """ECS backend should still produce exactly the current ECS shape (regression)."""
+    template = _synth(_valid_props(compute_backend="ecs"))
+    task_defs = template.find_resources("AWS::ECS::TaskDefinition")
+    assert len(task_defs) == 5
+    families = sorted(r["Properties"]["Family"] for r in task_defs.values())
+    assert families == sorted(f"mmc-test-{a}" for a in _ANALYSERS)
+    # State machine should use ecs:runTask, not lambda:invoke
+    sms = template.find_resources("AWS::StepFunctions::StateMachine")
+    raw = next(iter(sms.values()))["Properties"].get("DefinitionString") or next(iter(sms.values()))["Properties"].get(
+        "DefinitionBody"
+    )
+    text = _flatten_definition(raw)
+    assert "ecs:runTask" in text
+    assert "lambda:invoke" not in text
