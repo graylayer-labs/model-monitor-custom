@@ -101,7 +101,7 @@ def test_full_inference_monitor_fan_out(localstack_resources):
 
         if status == "SUCCEEDED":
             break
-        elif status == "FAILED":
+        if status == "FAILED":
             raise AssertionError(f"SFN execution failed: {exec_status.get('cause', 'unknown')}")
 
         time.sleep(1)
@@ -140,6 +140,4 @@ def test_full_inference_monitor_fan_out(localstack_resources):
     # Verify we have one outcome per analyser
     expected_analysers = {"mq", "dq", "bias", "explain", "shadow"}
     actual_analysers = set(analyser_outcomes.keys())
-    assert (
-        actual_analysers == expected_analysers
-    ), f"Got analysers {actual_analysers}, expected {expected_analysers}"
+    assert actual_analysers == expected_analysers, f"Got analysers {actual_analysers}, expected {expected_analysers}"

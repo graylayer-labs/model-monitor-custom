@@ -343,10 +343,10 @@ def _print_table(summary: dict[str, Any]) -> None:
         summary: JSON summary produced by :func:`_summarise`.
     """
     header = f"{'analyser':<12}{'outcome':<28}{'severity':<10}{'violations':<10}"
-    print(header)  # noqa: T201 — CLI output
-    print("-" * len(header))  # noqa: T201
+    print(header)  # ruff: ignore[print] — CLI output
+    print("-" * len(header))  # ruff: ignore[print]
     for entry in summary["runs"]:
-        print(  # noqa: T201
+        print(  # ruff: ignore[print]
             f"{entry['analyser']:<12}{entry['outcome']:<28}{entry['severity']:<10}{entry['violation_count']:<10}",
         )
 

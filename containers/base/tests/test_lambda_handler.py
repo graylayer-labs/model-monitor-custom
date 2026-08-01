@@ -32,7 +32,6 @@ def test_lambda_handler_with_sfn_payload():
     import os
 
     import boto3
-
     from mmc_base.lambda_handler import handler
 
     # Set region for boto3 clients throughout the test

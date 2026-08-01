@@ -61,7 +61,7 @@ def build_sidecar(
     )
 
 
-def write_failure(  # noqa: PLR0913 — public API: exc/env/output_uri/started_at + outcome/provenance
+def write_failure(  # ruff: ignore[too-many-arguments] — public API: exc/env/output_uri/started_at + outcome/provenance
     exc: BaseException,
     env: EnvContract,
     output_uri: str,

@@ -18,7 +18,7 @@ def _parquet_bytes(df: pd.DataFrame) -> bytes:
     return buf.getvalue()
 
 
-def test_shadow_analyser_end_to_end_via_base_harness() -> None:  # noqa: PLR0914 — harness plumbing needs many locals
+def test_shadow_analyser_end_to_end_via_base_harness() -> None:  # ruff: ignore[too-many-locals] — harness plumbing needs many locals
     n = 40
     rng = np.random.default_rng(1)
     preds = rng.integers(0, 2, size=n).tolist()

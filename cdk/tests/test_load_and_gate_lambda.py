@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
 import pytest
-
 from model_monitor_cdk.load_and_gate import LoadAndGateInput, LoadAndGateOutput, load_and_gate
 
 

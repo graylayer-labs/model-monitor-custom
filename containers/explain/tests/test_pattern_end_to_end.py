@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-import pickle  # noqa: S403 — trusted local artefacts in test
+import pickle  # ruff: ignore[suspicious-pickle-import] — trusted local artefacts in test
 from pathlib import Path
 
 import pandas as pd

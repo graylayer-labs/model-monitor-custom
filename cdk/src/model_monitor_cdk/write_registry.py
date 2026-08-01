@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import os
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
+import boto3
 from pydantic import BaseModel, Field
+
+from model_monitor_cdk.baseline_registry import BaselineRegistry
 
 
 class WriteRegistryInput(BaseModel):
@@ -60,16 +64,46 @@ def write_registry(event: dict, context: object) -> dict:
     2. Write to DynamoDB table (PK=project, SK=v<model_version>)
     3. Set evaluated_at = now(), include all fields
     4. Return success flag for downstream SFN steps
+
+    Note:
+        May raise KeyError if BASELINE_REGISTRY_TABLE_NAME env var is not set,
+        or ClientError if DynamoDB put_item operation fails.
     """
     # Parse input
     registry_input = WriteRegistryInput(**event)
 
-    # TODO: Write to DynamoDB table
-    # - Table name from env var (or config)
-    # - Item: PK=project, SK=v<model_version>
-    # - Include: status, baseline_prefix, analysers, manifest_uri, sfn_execution_arn, evaluated_at
+    # Get table name from environment
+    table_name = os.environ["BASELINE_REGISTRY_TABLE_NAME"]
 
-    # Placeholder: return written=True
+    # Construct BaselineRegistry instance
+    registry = BaselineRegistry(
+        project=registry_input.project,
+        model_version=registry_input.model_version,
+        status=registry_input.status,
+        baseline_prefix=registry_input.baseline_prefix,
+        analysers=registry_input.analysers,
+        manifest_uri=registry_input.manifest_uri,
+        evaluated_at=datetime.now(UTC),
+        sfn_execution_arn=registry_input.sfn_execution_arn,
+    )
+
+    # Write to DynamoDB
+    dynamodb = boto3.resource("dynamodb")
+    table = dynamodb.Table(table_name)
+
+    table.put_item(
+        Item={
+            "project": registry.project,
+            "sk": registry.ddb_sk,
+            "status": registry.status,
+            "baseline_prefix": registry.baseline_prefix,
+            "analysers": registry.analysers,
+            "manifest_uri": registry.manifest_uri,
+            "sfn_execution_arn": registry.sfn_execution_arn,
+            "evaluated_at": registry.evaluated_at.isoformat(),
+        }
+    )
+
     output = WriteRegistryOutput(
         project=registry_input.project,
         model_version=registry_input.model_version,

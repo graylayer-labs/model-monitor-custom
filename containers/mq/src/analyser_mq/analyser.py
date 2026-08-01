@@ -232,7 +232,7 @@ class MqAnalyser:
     ``spec.severity_threshold`` and ``alert`` when at or above it.
     """
 
-    def compute(self, inputs: AnalyserInputs, config: dict[str, Any]) -> AnalyserOutput:  # noqa: PLR6301 — protocol
+    def compute(self, inputs: AnalyserInputs, config: dict[str, Any]) -> AnalyserOutput:  # ruff: ignore[no-self-use] — protocol
         """Run MQ metrics against the configured predictions frame.
 
         Args:

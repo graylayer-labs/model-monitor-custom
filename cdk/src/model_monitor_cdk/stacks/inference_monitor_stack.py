@@ -9,11 +9,10 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, ClassVar, Literal
-
-from model_monitor_cdk.config import ComputeBackend
+from typing import Any, ClassVar, Literal
 
 from aws_cdk import (
     CfnOutput,
@@ -60,6 +59,8 @@ from aws_cdk import (
 )
 from constructs import Construct
 
+from model_monitor_cdk.config import ComputeBackend
+
 _ECR_PATTERN = re.compile(r"^\d{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/[^\s:]+:[^\s]+$")
 _ACCOUNT_ID_PATTERN = re.compile(r"^\d{12}$")
 
@@ -102,6 +103,10 @@ class InferenceMonitorStackProps:
         sfn_retry_backoff_seconds: IntervalSeconds seed for exponential backoff.
         analyser_image_source: Optional callable to override ECR image source
             (used in tests to build local Docker assets instead).
+        baseline_registry_table_name: Name of baseline registry DynamoDB table
+            (optional, for cross-stack reference in Activation Lambda).
+        baseline_registry_table_arn: ARN of baseline registry DynamoDB table
+            (optional, for cross-stack reference if table not in this stack).
     """
 
     _REQUIRED_ANALYSERS: ClassVar[frozenset[str]] = frozenset(_ANALYSER_TYPES)
@@ -124,6 +129,8 @@ class InferenceMonitorStackProps:
     sfn_retry_max_attempts: int = 3
     sfn_retry_backoff_seconds: int = 30
     analyser_image_source: Callable[[str], lambda_.DockerImageCode] | None = None
+    baseline_registry_table_name: str | None = None
+    baseline_registry_table_arn: str | None = None
 
     def __post_init__(self) -> None:
         """Validate props at construction."""
@@ -210,7 +217,7 @@ class InferenceMonitorStack(Stack):
         construct_id: str,
         *,
         props: InferenceMonitorStackProps,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,  # ruff: ignore[any-type]
     ) -> None:
         """Wire the live analyser runtime.
 
@@ -295,6 +302,7 @@ class InferenceMonitorStack(Stack):
                 kms_key=kms_key,
                 log_groups=log_groups,
             )
+            activation_fn = self._build_activation_lambda(env=env)
             state_machine = self._build_state_machine_lambda(
                 env=env,
                 lambda_functions=lambda_functions,
@@ -417,6 +425,75 @@ class InferenceMonitorStack(Stack):
             )
             fns[analyser] = fn
         return fns
+
+    def _build_activation_lambda(
+        self,
+        *,
+        env: str,
+        baseline_registry_table: dynamodb.ITable | None = None,
+    ) -> lambda_.Function | None:
+        """Activation Lambda to query baseline registry and enable monitoring if approved.
+
+        Args:
+            env: Environment tag.
+            baseline_registry_table: The DynamoDB table to grant read access to.
+                If None and baseline_registry_table_name is set, a table reference
+                will be created via from_table_name. If both are None, returns None.
+
+        Returns:
+            The Activation Lambda function, or None if no baseline registry is configured.
+        """
+        props = self._props
+        if not props.baseline_registry_table_name and not baseline_registry_table:
+            return None
+
+        # If table not provided, create a reference from table name
+        if baseline_registry_table is None and props.baseline_registry_table_name:
+            baseline_registry_table = dynamodb.Table.from_table_name(
+                self,
+                "BaselineRegistryTableRef",
+                table_name=props.baseline_registry_table_name,
+            )
+
+        if baseline_registry_table is None:
+            return None
+
+        # Create execution role for Activation Lambda
+        exec_role = iam.Role(
+            self,
+            "ActivationLambdaExecRole",
+            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),  # ty: ignore[invalid-argument-type]
+            description="Lambda execution role for Activation function",
+        )
+
+        # Grant read access to baseline registry (GetItem + Query)
+        baseline_registry_table.grant(exec_role, "dynamodb:GetItem", "dynamodb:Query")
+
+        # Create the Activation Lambda function
+        cdk_src_dir = Path(__file__).resolve().parent.parent
+        activation_log_group = logs.LogGroup(
+            self,
+            "ActivationLambdaLogGroup",
+            log_group_name=f"/mmc/{env}/activation",
+            retention=logs.RetentionDays.TWO_WEEKS,
+            removal_policy=RemovalPolicy.DESTROY,
+        )
+        fn = lambda_.Function(
+            self,
+            "ActivationFn",
+            runtime=lambda_.Runtime.PYTHON_3_12,
+            handler="model_monitor_cdk.activation.activation",
+            code=lambda_.Code.from_asset(str(cdk_src_dir)),
+            role=exec_role,  # ty: ignore[invalid-argument-type]
+            function_name=f"mmc-{env}-activation",
+            memory_size=512,
+            timeout=Duration.seconds(60),
+            environment={
+                "BASELINE_REGISTRY_TABLE_NAME": baseline_registry_table.table_name,
+            },
+            log_group=activation_log_group,
+        )
+        return fn
 
     def _build_task_definitions(
         self,

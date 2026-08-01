@@ -1,5 +1,10 @@
 {
   "Outputs": {
+    "BaselineRegistryTableName": {
+      "Value": {
+        "Ref": "BaselineRegistry7AC035D9"
+      }
+    },
     "EventRuleArn": {
       "Value": {
         "Fn::GetAtt": [
@@ -467,6 +472,49 @@
       },
       "Type": "AWS::EC2::VPCGatewayAttachment"
     },
+    "BaselineRegistry7AC035D9": {
+      "DeletionPolicy": "Delete",
+      "Properties": {
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "project",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "sk",
+            "AttributeType": "S"
+          }
+        ],
+        "BillingMode": "PAY_PER_REQUEST",
+        "KeySchema": [
+          {
+            "AttributeName": "project",
+            "KeyType": "HASH"
+          },
+          {
+            "AttributeName": "sk",
+            "KeyType": "RANGE"
+          }
+        ],
+        "TableName": "mmc-test-baseline-registry",
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ]
+      },
+      "Type": "AWS::DynamoDB::Table",
+      "UpdateReplacePolicy": "Delete"
+    },
     "BaselineStateMachineC8CE9B66": {
       "DeletionPolicy": "Delete",
       "DependsOn": [
@@ -477,7 +525,14 @@
           "Fn::Join": [
             "",
             [
-              "{\"Comment\": \"mmc-test-example-classifier-baseline\", \"StartAt\": \"AllAnalysers\", \"States\": {\"AllAnalysers\": {\"Type\": \"Parallel\", \"End\": true, \"Branches\": [{\"StartAt\": \"RunMq\", \"States\": {\"RunMq\": {\"Type\": \"Task\", \"Resource\": \"arn:aws:states:::ecs:runTask.sync\", \"Parameters\": {\"LaunchType\": \"FARGATE\", \"Cluster\": \"",
+              "{\"Comment\": \"mmc-test-example-classifier-baseline\", \"StartAt\": \"LoadAndGate\", \"States\": {\"LoadAndGate\": {\"Type\": \"Task\", \"Resource\": \"arn:aws:states:::lambda:invoke\", \"Parameters\": {\"FunctionName\": \"",
+              {
+                "Fn::GetAtt": [
+                  "LoadAndGateFnD60F5581",
+                  "Arn"
+                ]
+              },
+              "\", \"Payload\": {\"manifest_uri.$\": \"$.manifest_uri\", \"config_uri.$\": \"$.config_uri\", \"project.$\": \"$.project\"}}, \"ResultPath\": \"$.gate\", \"Retry\": [{\"ErrorEquals\": [\"Lambda.ServiceException\", \"Lambda.AWSLambdaException\", \"Lambda.SdkClientException\", \"States.TaskFailed\"], \"IntervalSeconds\": 30, \"MaxAttempts\": 3, \"BackoffRate\": 2.0}], \"Catch\": [{\"ErrorEquals\": [\"States.ALL\"], \"Next\": \"FailState\"}], \"Next\": \"ApprovalCheck\"}, \"ApprovalCheck\": {\"Type\": \"Choice\", \"Choices\": [{\"Variable\": \"$.gate.status\", \"StringEquals\": \"rejected\", \"Next\": \"RejectEnd\"}], \"Default\": \"AllAnalysers\"}, \"AllAnalysers\": {\"Type\": \"Parallel\", \"Branches\": [{\"StartAt\": \"RunMq\", \"States\": {\"RunMq\": {\"Type\": \"Task\", \"Resource\": \"arn:aws:states:::ecs:runTask.sync\", \"Parameters\": {\"LaunchType\": \"FARGATE\", \"Cluster\": \"",
               {
                 "Fn::GetAtt": [
                   "AnalyserClusterE60FB0A7",
@@ -572,7 +627,21 @@
               {
                 "Ref": "AnalyserVpcPublicSubnet2Subnet674C52A9"
               },
-              "\"], \"AssignPublicIp\": \"DISABLED\"}}, \"Overrides\": {\"ContainerOverrides\": [{\"Name\": \"ContainerShadow\", \"Environment\": [{\"Name\": \"PROJECT_NAME\", \"Value\": \"example-classifier\"}, {\"Name\": \"RUN_ID\", \"Value.$\": \"$.run_id\"}, {\"Name\": \"ANALYSER_TYPE\", \"Value\": \"baseline-shadow\"}, {\"Name\": \"SNAPSHOT_URI\", \"Value.$\": \"$.snapshot_uri\"}, {\"Name\": \"ENVIRONMENT\", \"Value\": \"test\"}, {\"Name\": \"MMC_ANALYSER_MODULE\", \"Value\": \"analyser_shadow.analyser:ShadowAnalyser\"}]}]}}, \"Retry\": [{\"ErrorEquals\": [\"States.TaskFailed\", \"ECS.AmazonECSException\"], \"IntervalSeconds\": 30, \"MaxAttempts\": 3, \"BackoffRate\": 2.0}], \"Catch\": [{\"ErrorEquals\": [\"States.ALL\"], \"Next\": \"BranchShadowFailed\", \"ResultPath\": \"$.error\"}], \"End\": true}, \"BranchShadowFailed\": {\"Type\": \"Pass\", \"End\": true, \"Result\": {\"analyser\": \"baseline-shadow\", \"outcome\": \"branch_failed\"}}}}]}}}"
+              "\"], \"AssignPublicIp\": \"DISABLED\"}}, \"Overrides\": {\"ContainerOverrides\": [{\"Name\": \"ContainerShadow\", \"Environment\": [{\"Name\": \"PROJECT_NAME\", \"Value\": \"example-classifier\"}, {\"Name\": \"RUN_ID\", \"Value.$\": \"$.run_id\"}, {\"Name\": \"ANALYSER_TYPE\", \"Value\": \"baseline-shadow\"}, {\"Name\": \"SNAPSHOT_URI\", \"Value.$\": \"$.snapshot_uri\"}, {\"Name\": \"ENVIRONMENT\", \"Value\": \"test\"}, {\"Name\": \"MMC_ANALYSER_MODULE\", \"Value\": \"analyser_shadow.analyser:ShadowAnalyser\"}]}]}}, \"Retry\": [{\"ErrorEquals\": [\"States.TaskFailed\", \"ECS.AmazonECSException\"], \"IntervalSeconds\": 30, \"MaxAttempts\": 3, \"BackoffRate\": 2.0}], \"Catch\": [{\"ErrorEquals\": [\"States.ALL\"], \"Next\": \"BranchShadowFailed\", \"ResultPath\": \"$.error\"}], \"End\": true}, \"BranchShadowFailed\": {\"Type\": \"Pass\", \"End\": true, \"Result\": {\"analyser\": \"baseline-shadow\", \"outcome\": \"branch_failed\"}}}}], \"ResultPath\": \"$.analyser_results\", \"Next\": \"EvaluateResults\"}, \"EvaluateResults\": {\"Type\": \"Task\", \"Resource\": \"arn:aws:states:::lambda:invoke\", \"Parameters\": {\"FunctionName\": \"",
+              {
+                "Fn::GetAtt": [
+                  "EvaluateResultsFn2402573A",
+                  "Arn"
+                ]
+              },
+              "\", \"Payload\": {\"gate_output.$\": \"$.gate\", \"analyser_results.$\": \"$.analyser_results\", \"required_analysers\": [\"mq\", \"dq\", \"bias\", \"explain\", \"shadow\"]}}, \"ResultPath\": \"$.eval_output\", \"Retry\": [{\"ErrorEquals\": [\"Lambda.ServiceException\", \"Lambda.AWSLambdaException\", \"Lambda.SdkClientException\", \"States.TaskFailed\"], \"IntervalSeconds\": 30, \"MaxAttempts\": 3, \"BackoffRate\": 2.0}], \"Catch\": [{\"ErrorEquals\": [\"States.ALL\"], \"Next\": \"FailState\"}], \"Next\": \"WriteDecision\"}, \"WriteDecision\": {\"Type\": \"Choice\", \"Choices\": [{\"Variable\": \"$.eval_output.all_required_ok\", \"BooleanEquals\": true, \"Next\": \"WriteRegistry\"}], \"Default\": \"RejectEnd\"}, \"WriteRegistry\": {\"Type\": \"Task\", \"Resource\": \"arn:aws:states:::lambda:invoke\", \"Parameters\": {\"FunctionName\": \"",
+              {
+                "Fn::GetAtt": [
+                  "WriteRegistryFnA4C02CE0",
+                  "Arn"
+                ]
+              },
+              "\", \"Payload\": {\"project.$\": \"$.project\", \"model_version.$\": \"$.model_version\", \"status\": \"approved\", \"baseline_prefix.$\": \"$.baseline_prefix\", \"analysers.$\": \"$.analyser_results\", \"manifest_uri.$\": \"$.manifest_uri\", \"sfn_execution_arn.$\": \"$$.Execution.Arn\"}}, \"ResultPath\": \"$.write_output\", \"Retry\": [{\"ErrorEquals\": [\"Lambda.ServiceException\", \"Lambda.AWSLambdaException\", \"Lambda.SdkClientException\", \"States.TaskFailed\"], \"IntervalSeconds\": 30, \"MaxAttempts\": 3, \"BackoffRate\": 2.0}], \"Catch\": [{\"ErrorEquals\": [\"States.ALL\"], \"Next\": \"FailState\"}], \"Next\": \"SuccessEnd\"}, \"RejectEnd\": {\"Type\": \"Fail\", \"Error\": \"BaselineRejected\", \"Cause\": \"Baseline did not meet approval criteria\"}, \"SuccessEnd\": {\"Type\": \"Succeed\"}, \"FailState\": {\"Type\": \"Fail\", \"Error\": \"BaselineExecutionFailed\", \"Cause\": \"A critical baseline process failed\"}}}"
             ]
           ]
         },
@@ -670,6 +739,180 @@
           ],
           "Version": "2012-10-17"
         },
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "EvaluateResultsFn2402573A": {
+      "DependsOn": [
+        "EvaluateResultsFnServiceRole22D2BA5B"
+      ],
+      "Properties": {
+        "Code": {
+          "S3Bucket": "cdk-hnb659fds-assets-444444444444-eu-west-1",
+          "S3Key": "dbb8111934448bfaeba6a396f9fec645a30c8636a858195ee6db6bea9fd50718.zip"
+        },
+        "Description": "Evaluate analyser results and gate progression",
+        "Environment": {
+          "Variables": {
+            "ENVIRONMENT": "test"
+          }
+        },
+        "Handler": "model_monitor_cdk.evaluate_results.evaluate_results",
+        "MemorySize": 512,
+        "Role": {
+          "Fn::GetAtt": [
+            "EvaluateResultsFnServiceRole22D2BA5B",
+            "Arn"
+          ]
+        },
+        "Runtime": "python3.12",
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ],
+        "Timeout": 60
+      },
+      "Type": "AWS::Lambda::Function"
+    },
+    "EvaluateResultsFnServiceRole22D2BA5B": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition"
+                },
+                ":iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+              ]
+            ]
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "LoadAndGateFnD60F5581": {
+      "DependsOn": [
+        "LoadAndGateFnServiceRole2513D8C2"
+      ],
+      "Properties": {
+        "Code": {
+          "S3Bucket": "cdk-hnb659fds-assets-444444444444-eu-west-1",
+          "S3Key": "dbb8111934448bfaeba6a396f9fec645a30c8636a858195ee6db6bea9fd50718.zip"
+        },
+        "Description": "Load manifest + config, gate baseline execution",
+        "Environment": {
+          "Variables": {
+            "ENVIRONMENT": "test"
+          }
+        },
+        "Handler": "model_monitor_cdk.load_and_gate.load_and_gate",
+        "MemorySize": 512,
+        "Role": {
+          "Fn::GetAtt": [
+            "LoadAndGateFnServiceRole2513D8C2",
+            "Arn"
+          ]
+        },
+        "Runtime": "python3.12",
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ],
+        "Timeout": 60
+      },
+      "Type": "AWS::Lambda::Function"
+    },
+    "LoadAndGateFnServiceRole2513D8C2": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition"
+                },
+                ":iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+              ]
+            ]
+          }
+        ],
         "Tags": [
           {
             "Key": "Component",
@@ -1995,6 +2238,131 @@
         ]
       },
       "Type": "AWS::IAM::Policy"
+    },
+    "WriteRegistryFnA4C02CE0": {
+      "DependsOn": [
+        "WriteRegistryFnServiceRoleDefaultPolicyD790B57F",
+        "WriteRegistryFnServiceRoleE5B88840"
+      ],
+      "Properties": {
+        "Code": {
+          "S3Bucket": "cdk-hnb659fds-assets-444444444444-eu-west-1",
+          "S3Key": "dbb8111934448bfaeba6a396f9fec645a30c8636a858195ee6db6bea9fd50718.zip"
+        },
+        "Description": "Write baseline approval record to registry table",
+        "Environment": {
+          "Variables": {
+            "BASELINE_REGISTRY_TABLE_NAME": {
+              "Ref": "BaselineRegistry7AC035D9"
+            },
+            "ENVIRONMENT": "test"
+          }
+        },
+        "Handler": "model_monitor_cdk.write_registry.write_registry",
+        "MemorySize": 512,
+        "Role": {
+          "Fn::GetAtt": [
+            "WriteRegistryFnServiceRoleE5B88840",
+            "Arn"
+          ]
+        },
+        "Runtime": "python3.12",
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ],
+        "Timeout": 60
+      },
+      "Type": "AWS::Lambda::Function"
+    },
+    "WriteRegistryFnServiceRoleDefaultPolicyD790B57F": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "dynamodb:BatchWriteItem",
+                "dynamodb:PutItem",
+                "dynamodb:UpdateItem",
+                "dynamodb:DeleteItem",
+                "dynamodb:DescribeTable"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "BaselineRegistry7AC035D9",
+                    "Arn"
+                  ]
+                }
+              ]
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "WriteRegistryFnServiceRoleDefaultPolicyD790B57F",
+        "Roles": [
+          {
+            "Ref": "WriteRegistryFnServiceRoleE5B88840"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Policy"
+    },
+    "WriteRegistryFnServiceRoleE5B88840": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition"
+                },
+                ":iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+              ]
+            ]
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Component",
+            "Value": "baseline"
+          },
+          {
+            "Key": "Environment",
+            "Value": "test"
+          },
+          {
+            "Key": "Project",
+            "Value": "example-classifier"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Role"
     }
   },
   "Rules": {

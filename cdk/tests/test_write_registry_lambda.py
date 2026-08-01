@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 import pytest
-
 from model_monitor_cdk.write_registry import (
     WriteRegistryInput,
     WriteRegistryOutput,

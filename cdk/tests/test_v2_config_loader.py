@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from model_monitor_cdk.config_loader import ConfigLoader, ProjectConfigVersion
 
 

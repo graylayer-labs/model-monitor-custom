@@ -5,10 +5,8 @@ from __future__ import annotations
 import json
 from unittest.mock import patch
 
-import pytest
-from moto import mock_aws
-
 from model_monitor_cdk.load_and_gate import load_and_gate
+from moto import mock_aws
 
 
 @mock_aws

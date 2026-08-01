@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import uuid4
 
 import pytest
-from pydantic import ValidationError
-
 from model_monitor_cdk.manifest import Manifest
+from pydantic import ValidationError
 
 
 def test_manifest_accepts_valid_shape():

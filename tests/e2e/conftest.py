@@ -88,6 +88,8 @@ def localstack_resources(localstack_up, build_analyser_images):
 
     kms = boto3.client("kms", endpoint_url="http://localhost:4566", region_name="eu-west-1")
     s3 = boto3.client("s3", endpoint_url="http://localhost:4566", region_name="eu-west-1")
+    ddb = boto3.client("dynamodb", endpoint_url="http://localhost:4566", region_name="eu-west-1")
+    iam = boto3.client("iam", endpoint_url="http://localhost:4566", region_name="eu-west-1")
 
     # Create KMS key
     key_resp = kms.create_key(Description="MMC test key")
@@ -99,14 +101,64 @@ def localstack_resources(localstack_up, build_analyser_images):
         CreateBucketConfiguration={"LocationConstraint": "eu-west-1"},
     )
 
-    # Create outcomes table (created by CDK, but pre-create for determinism if needed)
-    # (CDK will create it; we just seed data)
+    # Create producer bucket (for baseline input)
+    s3.create_bucket(
+        Bucket="mmc-test-producer",
+        CreateBucketConfiguration={"LocationConstraint": "eu-west-1"},
+    )
 
-    # Export ARNs for the CDK app
+    # Create baseline registry table (DynamoDB)
+    registry_table_name = "mmc-test-baseline-registry"
+    ddb.create_table(
+        TableName=registry_table_name,
+        KeySchema=[
+            {"AttributeName": "project", "KeyType": "HASH"},
+            {"AttributeName": "sk", "KeyType": "RANGE"},
+        ],
+        AttributeDefinitions=[
+            {"AttributeName": "project", "AttributeType": "S"},
+            {"AttributeName": "sk", "AttributeType": "S"},
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
+    # Create baseline writer IAM role for cross-account writes
+    trust_policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {"Service": "lambda.amazonaws.com"},
+                "Action": "sts:AssumeRole",
+            }
+        ],
+    }
+    role_name = "mmc-test-baseline-writer"
+    role_resp = iam.create_role(
+        RoleName=role_name,
+        AssumeRolePolicyDocument=json.dumps(trust_policy),
+        Description="MMC test baseline writer role",
+    )
+    baseline_writer_role_arn = role_resp["Role"]["Arn"]
+
+    # Export ARNs and names for the CDK app
     os.environ["MMC_TEST_KMS_KEY_ARN"] = key_arn
     os.environ["MMC_TEST_BASELINES_BUCKET_ARN"] = "arn:aws:s3:::mmc-test-baselines"
+    os.environ["MMC_TEST_PRODUCER_BUCKET_ARN"] = "arn:aws:s3:::mmc-test-producer"
+    os.environ["MMC_TEST_BASELINE_WRITER_ROLE_ARN"] = baseline_writer_role_arn
+    os.environ["MMC_TEST_BASELINE_REGISTRY_TABLE"] = registry_table_name
 
-    return {"key_arn": key_arn, "bucket_arn": "arn:aws:s3:::mmc-test-baselines", "s3": s3, "kms": kms}
+    return {
+        "key_arn": key_arn,
+        "baselines_bucket": "mmc-test-baselines",
+        "producer_bucket": "mmc-test-producer",
+        "registry_table_name": registry_table_name,
+        "baseline_writer_role_arn": baseline_writer_role_arn,
+        "s3": s3,
+        "kms": kms,
+        "ddb": ddb,
+        "iam": iam,
+    }
 
 
 # Skip all e2e tests unless explicitly enabled

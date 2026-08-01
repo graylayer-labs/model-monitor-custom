@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from model_monitor_cdk.baseline_gate import GateLogic, GateOutcome
 from model_monitor_cdk.config import MonitorConfig, ProjectSpec
 from model_monitor_cdk.manifest import Manifest, Provenance
@@ -78,9 +77,7 @@ def test_gate_logic_warns_on_missing_optional_artifact(sample_manifest, sample_p
     gate = GateLogic(manifest=sample_manifest, project=sample_project)
     outcome = gate.evaluate()
     assert outcome.status == "approved_with_warnings"
-    assert any(
-        "data_quality" in w.lower() or "optional" in w.lower() for w in outcome.warnings
-    )
+    assert any("data_quality" in w.lower() or "optional" in w.lower() for w in outcome.warnings)
 
 
 def test_gate_logic_skips_disabled_monitors(sample_manifest, sample_project):

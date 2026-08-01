@@ -104,7 +104,7 @@ class ProducerEventsStack(Stack):
         construct_id: str,
         *,
         props: ProducerEventsStackProps,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,  # ruff: ignore[any-type]
     ) -> None:
         """Wire the forwarding rule.
 

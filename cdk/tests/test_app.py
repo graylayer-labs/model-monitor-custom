@@ -13,7 +13,7 @@ from aws_cdk.assertions import Template
 _APP_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_APP_DIR))
 
-from app import build_app  # noqa: E402
+from app import build_app  # ruff: ignore[module-import-not-at-top-of-file]
 
 
 def _fixture_configs(tmp_path: Path) -> tuple[Path, Path]:
@@ -52,10 +52,11 @@ def test_single_account_collapse_materialises_four_stacks(tmp_path: Path) -> Non
     build_app(app)
 
     stacks = [child for child in app.node.children if isinstance(child, cdk.Stack)]
-    assert len(stacks) == 4
+    assert len(stacks) == 5
     stack_ids = {s.node.id for s in stacks}
     assert stack_ids == {
         "MMC-Test-Artifact",
+        "MMC-Test-Config",
         "MMC-Test-SharedIam",
         "MMC-Test-InferenceMonitor-example-classifier",
         "MMC-Test-OperationsBaseline-example-classifier",
@@ -95,10 +96,11 @@ def test_multi_project_multi_account(tmp_path: Path) -> None:
     app = cdk.App(context={"accounts": str(a), "projects": str(p)})
     build_app(app)
     stacks = [c for c in app.node.children if isinstance(c, cdk.Stack)]
-    # 1 artifact + 1 shared-iam + 2 * (inference + operations) = 6
-    assert len(stacks) == 6
+    # 1 artifact + 1 config + 1 shared-iam + 2 * (inference + operations) = 7
+    assert len(stacks) == 7
     accounts_per_stack = {s.node.id: s.account for s in stacks}
     assert accounts_per_stack["MMC-Test-Artifact"] == "111111111111"
+    assert accounts_per_stack["MMC-Test-Config"] == "111111111111"
     assert accounts_per_stack["MMC-Test-SharedIam"] == "111111111111"
     assert accounts_per_stack["MMC-Test-InferenceMonitor-p1"] == "333333333333"
     assert accounts_per_stack["MMC-Test-InferenceMonitor-p2"] == "444444444444"

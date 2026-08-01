@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import boto3
 import pytest
-from moto import mock_aws
-
 from model_monitor_cdk.activation import (
     ActivationInput,
     ActivationOutput,
     activation,
 )
+from moto import mock_aws
 
 
 @pytest.fixture
@@ -112,7 +110,7 @@ def test_activation_returns_true_for_approved_baseline(monkeypatch: pytest.Monke
             "baseline_prefix": "s3://baselines/project-a/v7/output/",
             "analysers": {"mq": "ok", "dq": "ok"},
             "manifest_uri": "s3://baselines/project-a/v7/input/manifest.json",
-            "evaluated_at": datetime.now(timezone.utc).isoformat(),
+            "evaluated_at": datetime.now(UTC).isoformat(),
             "sfn_execution_arn": "arn:aws:states:eu-west-1:123456789012:execution:baseline-sfn:abc123",
         }
     )
@@ -158,7 +156,7 @@ def test_activation_returns_false_for_rejected_baseline(monkeypatch: pytest.Monk
             "baseline_prefix": "s3://baselines/project-a/v7/output/",
             "analysers": {"mq": "failed", "dq": "ok"},
             "manifest_uri": "s3://baselines/project-a/v7/input/manifest.json",
-            "evaluated_at": datetime.now(timezone.utc).isoformat(),
+            "evaluated_at": datetime.now(UTC).isoformat(),
             "sfn_execution_arn": "arn:aws:states:eu-west-1:123456789012:execution:baseline-sfn:abc123",
         }
     )

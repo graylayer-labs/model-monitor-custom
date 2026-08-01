@@ -68,28 +68,22 @@ class GateLogic:
             artifacts_needed = self._artifacts_for_monitor(monitor_name)
 
             # Check if all needed artifacts are in manifest
-            manifest_has_all = all(
-                artifact in self.manifest.artifacts for artifact in artifacts_needed
-            )
+            manifest_has_all = all(artifact in self.manifest.artifacts for artifact in artifacts_needed)
 
             if manifest_has_all:
                 # All artifacts present → analyser will run
                 analysers_to_run.append(monitor_name)
+            # Artifact(s) missing
+            elif monitor_config.required:
+                # Hard fail: required artifact missing
+                failed = True
+                warnings.append(
+                    f"Required monitor {monitor_name!r} missing artifacts: "
+                    f"expected {artifacts_needed}, got {list(self.manifest.artifacts.keys())}"
+                )
             else:
-                # Artifact(s) missing
-                if monitor_config.required:
-                    # Hard fail: required artifact missing
-                    failed = True
-                    warnings.append(
-                        f"Required monitor {monitor_name!r} missing artifacts: "
-                        f"expected {artifacts_needed}, got {list(self.manifest.artifacts.keys())}"
-                    )
-                else:
-                    # Warn but continue: optional artifact missing
-                    warnings.append(
-                        f"Optional monitor {monitor_name!r} missing artifacts "
-                        f"{artifacts_needed}, will skip"
-                    )
+                # Warn but continue: optional artifact missing
+                warnings.append(f"Optional monitor {monitor_name!r} missing artifacts {artifacts_needed}, will skip")
 
         if failed:
             return GateOutcome(

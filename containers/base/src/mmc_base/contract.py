@@ -98,7 +98,7 @@ class EnvContract(BaseModel):
             raise ValueError(msg) from exc
         if not isinstance(parsed, dict):
             msg = "INPUT_URIS_JSON must decode to a JSON object"
-            raise ValueError(msg)  # noqa: TRY004 — pydantic field_validator wants ValueError
+            raise ValueError(msg)  # ruff: ignore[type-check-without-type-error] — pydantic field_validator wants ValueError
         for name, uri in parsed.items():
             if not isinstance(uri, str) or not uri.startswith("s3://"):
                 msg = f"INPUT_URIS_JSON[{name!r}] must be an s3:// URI"

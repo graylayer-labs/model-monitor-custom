@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import aws_cdk as cdk
 from aws_cdk import assertions as cdka
-
 from model_monitor_cdk.stacks.baseline_trigger_stack import BaselineTriggerStack
 
 

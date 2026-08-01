@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from model_monitor_cdk.config import ProjectSpec, ProjectsConfig
+from model_monitor_cdk.config import ProjectsConfig
 
 
 @dataclass

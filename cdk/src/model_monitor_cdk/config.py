@@ -46,7 +46,7 @@ def _validate_account_id(value: object, info: ValidationInfo) -> str:
     """
     if not isinstance(value, str):
         msg = f"{info.field_name} must be a string, got {type(value).__name__}: {value!r}"
-        raise ValueError(msg)  # noqa: TRY004  pydantic wraps as ValidationError
+        raise ValueError(msg)  # ruff: ignore[type-check-without-type-error]  pydantic wraps as ValidationError
     if not _ACCOUNT_ID_PATTERN.match(value):
         msg = rf"{info.field_name} must match ^\d{{12}}$, got: {value!r}"
         raise ValueError(msg)
@@ -88,7 +88,7 @@ class RolesConfig(BaseModel):
         """
         if not isinstance(value, list):
             msg = f"inference must be a list of 12-digit strings, got: {value!r}"
-            raise ValueError(msg)  # noqa: TRY004
+            raise ValueError(msg)  # ruff: ignore[type-check-without-type-error]
         entries: list[str] = []
         for entry in value:
             if not isinstance(entry, str) or not _ACCOUNT_ID_PATTERN.match(entry):
@@ -345,7 +345,7 @@ def _load_yaml(path: Path) -> dict:
         raise ValueError(msg) from exc
     if not isinstance(parsed, dict):
         msg = f"expected a top-level mapping in {path}, got: {type(parsed).__name__}"
-        raise ValueError(msg)  # noqa: TRY004
+        raise ValueError(msg)  # ruff: ignore[type-check-without-type-error]
     return parsed
 
 

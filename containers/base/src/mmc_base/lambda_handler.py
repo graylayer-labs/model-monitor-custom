@@ -16,16 +16,22 @@ from aws_lambda_powertools import Logger
 
 from mmc_base.contract import EnvContract
 from mmc_base.entrypoint import (
-    _emit_failure as entrypoint_emit_failure,
-    _emit_success as entrypoint_emit_success,
-    _run_analyser as entrypoint_run_analyser,
     INPUT_DIR,
+)
+from mmc_base.entrypoint import (
+    _emit_failure as entrypoint_emit_failure,
+)
+from mmc_base.entrypoint import (
+    _emit_success as entrypoint_emit_success,
+)
+from mmc_base.entrypoint import (
+    _run_analyser as entrypoint_run_analyser,
 )
 
 logger = Logger(service="mmc-lambda-handler")
 
 
-def handler(event: dict, context: object) -> dict:  # noqa: ARG001
+def handler(event: dict, context: object) -> dict:
     """Lambda handler for analyser execution.
 
     Args:
@@ -81,7 +87,7 @@ def handler(event: dict, context: object) -> dict:  # noqa: ARG001
     try:
         output = entrypoint_run_analyser(env, INPUT_DIR)
         entrypoint_emit_success(output, env)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # ruff: ignore[blind-except]
         entrypoint_emit_failure(exc, env, started_at)
         return {"analyser": env.ANALYSER_TYPE, "outcome": "failed_unhandled"}
 

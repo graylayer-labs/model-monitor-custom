@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from model_monitor_cdk.evaluate_results import (
     EvaluateResultsInput,
     EvaluateResultsOutput,

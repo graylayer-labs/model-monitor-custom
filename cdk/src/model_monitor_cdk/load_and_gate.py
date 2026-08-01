@@ -53,23 +53,23 @@ class LoadAndGateOutput:
 
 def _fetch_s3_json(uri: str) -> dict[str, Any]:
     """Fetch and parse JSON from S3 URI.
-    
+
     Args:
         uri: S3 URI (s3://bucket/key)
-        
+
     Returns:
         Parsed JSON dict
     """
     # Parse S3 URI
     if not uri.startswith("s3://"):
         raise ValueError(f"Invalid S3 URI: {uri}")
-    
+
     parts = uri[5:].split("/", 1)
     if len(parts) != 2:
         raise ValueError(f"Invalid S3 URI format: {uri}")
-    
+
     bucket, key = parts
-    
+
     # Fetch from S3
     s3 = boto3.client("s3")
     response = s3.get_object(Bucket=bucket, Key=key)
@@ -96,39 +96,39 @@ def load_and_gate(event: dict, context: object) -> dict:
     """
     # Parse input
     gate_input = LoadAndGateInput(**event)
-    
+
     try:
         # Fetch manifest and config from S3
         logger.info(f"Fetching manifest from {gate_input.manifest_uri}")
         manifest_dict = _fetch_s3_json(gate_input.manifest_uri)
         manifest = Manifest(**manifest_dict)
-        
+
         logger.info(f"Fetching config from {gate_input.config_uri}")
         config_dict = _fetch_s3_json(gate_input.config_uri)
         project = ProjectSpec(**config_dict)
-        
+
         # Run gate logic
         logger.info(f"Running gate logic for {gate_input.project}")
         gate = GateLogic(manifest=manifest, project=project)
         gate_outcome = gate.evaluate()
-        
+
         output = LoadAndGateOutput(
             status=gate_outcome.status,
             message=gate_outcome.message,
             analysers_to_run=gate_outcome.analysers_to_run,
         )
-        
+
         if gate_outcome.warnings:
             logger.warning(f"Gate warnings: {gate_outcome.warnings}")
-        
+
     except Exception as exc:
         logger.exception(f"Gate logic failed: {exc}")
         output = LoadAndGateOutput(
             status="rejected",
-            message=f"Gate logic error: {str(exc)}",
+            message=f"Gate logic error: {exc!s}",
             analysers_to_run=[],
         )
-    
+
     return {
         "status": output.status,
         "message": output.message,

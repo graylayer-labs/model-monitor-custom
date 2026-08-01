@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
+from model_monitor_cdk.baseline_registry import AnalyserStatus, BaselineRegistry
 from pydantic import ValidationError
-
-from model_monitor_cdk.baseline_registry import BaselineRegistry, AnalyserStatus
 
 
 def test_baseline_registry_item_accepts_valid_row():
@@ -25,7 +24,7 @@ def test_baseline_registry_item_accepts_valid_row():
             "shadow": AnalyserStatus.OK,
         },
         manifest_uri="s3://baselines/project-a/v7/input/manifest.json",
-        evaluated_at=datetime.now(timezone.utc),
+        evaluated_at=datetime.now(UTC),
         sfn_execution_arn="arn:aws:states:eu-west-1:123456789012:execution:baseline-sfn:abc123",
     )
     assert item.project == "project-a"
@@ -53,7 +52,7 @@ def test_baseline_registry_status_validation():
             baseline_prefix="s3://baselines/project-a/v7/output/",
             analysers={"model_quality": AnalyserStatus.OK},
             manifest_uri="s3://baselines/project-a/v7/input/manifest.json",
-            evaluated_at=datetime.now(timezone.utc),
+            evaluated_at=datetime.now(UTC),
             sfn_execution_arn="arn:aws:states:eu-west-1:123456789012:execution:sfn:abc",
         )
 
@@ -74,7 +73,7 @@ def test_baseline_registry_ddb_key():
         baseline_prefix="s3://baselines/project-a/v7/output/",
         analysers={"model_quality": AnalyserStatus.OK},
         manifest_uri="s3://baselines/project-a/v7/input/manifest.json",
-        evaluated_at=datetime.now(timezone.utc),
+        evaluated_at=datetime.now(UTC),
         sfn_execution_arn="arn:aws:states:eu-west-1:123456789012:execution:sfn:abc",
     )
     # PK = project, SK = v<N>
@@ -97,7 +96,7 @@ def test_baseline_registry_partial_analyser_status():
             # bias, explain, shadow may be skipped or not run
         },
         manifest_uri="s3://baselines/project-a/v7/input/manifest.json",
-        evaluated_at=datetime.now(timezone.utc),
+        evaluated_at=datetime.now(UTC),
         sfn_execution_arn="arn:aws:states:eu-west-1:123456789012:execution:sfn:abc",
     )
     assert len(item.analysers) == 2
@@ -113,7 +112,7 @@ def test_baseline_registry_rejected_row():
         baseline_prefix="s3://baselines/project-a/v7/output/",
         analysers={},  # no analysers run on rejection
         manifest_uri="s3://baselines/project-a/v7/input/manifest.json",
-        evaluated_at=datetime.now(timezone.utc),
+        evaluated_at=datetime.now(UTC),
         sfn_execution_arn="arn:aws:states:eu-west-1:123456789012:execution:sfn:abc",
     )
     assert item.status == "rejected"

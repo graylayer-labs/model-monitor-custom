@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import json
-
 import aws_cdk as cdk
 from aws_cdk import assertions as cdka
-
 from model_monitor_cdk.stacks.config_stack import ConfigStack
 
 

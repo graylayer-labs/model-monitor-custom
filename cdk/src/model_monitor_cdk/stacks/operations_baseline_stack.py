@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, ClassVar, Literal
 
 from aws_cdk import (
@@ -27,6 +28,9 @@ from aws_cdk import (
     RemovalPolicy,
     Stack,
     Tags,
+)
+from aws_cdk import (
+    aws_dynamodb as dynamodb,
 )
 from aws_cdk import (
     aws_ec2 as ec2,
@@ -45,6 +49,9 @@ from aws_cdk import (
 )
 from aws_cdk import (
     aws_kms as kms,
+)
+from aws_cdk import (
+    aws_lambda as lambda_,
 )
 from aws_cdk import (
     aws_logs as logs,
@@ -223,7 +230,7 @@ class OperationsBaselineStack(Stack):
         construct_id: str,
         *,
         props: OperationsBaselineStackProps,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,  # ruff: ignore[any-type]
     ) -> None:
         """Wire the snapshot analyser runtime.
 
@@ -262,6 +269,29 @@ class OperationsBaselineStack(Stack):
             enable_fargate_capacity_providers=True,
         )
 
+        self.registry_table = dynamodb.Table(
+            self,
+            "BaselineRegistry",
+            table_name=f"mmc-{env}-baseline-registry",
+            partition_key=dynamodb.Attribute(name="project", type=dynamodb.AttributeType.STRING),
+            sort_key=dynamodb.Attribute(name="sk", type=dynamodb.AttributeType.STRING),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY,
+        )
+
+        baselines_bucket = s3.Bucket.from_bucket_arn(
+            self,
+            "BaselinesBucket",
+            bucket_arn=props.baselines_bucket_arn,
+        )
+
+        # Build baseline Lambdas first (needed by state machine wiring)
+        self._build_baseline_lambdas(
+            env=env,
+            baselines_bucket=baselines_bucket,
+            kms_key=kms_key,
+        )
+
         log_groups = self._build_log_groups(env)
         task_defs = self._build_task_definitions(
             env=env,
@@ -278,6 +308,7 @@ class OperationsBaselineStack(Stack):
 
         CfnOutput(self, "StateMachineArn", value=state_machine.state_machine_arn)
         CfnOutput(self, "EventRuleArn", value=rule.rule_arn)
+        CfnOutput(self, "BaselineRegistryTableName", value=self.registry_table.table_name)
         for analyser, lg in log_groups.items():
             CfnOutput(self, f"LogGroup{analyser.title()}Name", value=lg.log_group_name)
 
@@ -376,29 +407,202 @@ class OperationsBaselineStack(Stack):
         task_defs: dict[str, ecs.FargateTaskDefinition],
         cluster: ecs.ICluster,
     ) -> sfn.StateMachine:
-        """SFN Standard with a Parallel of five per-analyser branches.
+        """SFN Standard with v2 Lambda-first flow.
 
-        Same per-branch Retry + Catch semantics as InferenceMonitorStack
-        (ADR 007) — one analyser failure does not fail the whole snapshot.
+        Flow: LoadAndGate → ApprovalCheck → Parallel → EvaluateResults → WriteDecision
+        → WriteRegistry → SuccessEnd (or terminal rejection states).
+
+        1. LoadAndGate: invoke Lambda to load manifest/config and gate baseline
+        2. ApprovalCheck: Choice state — if rejected, route to RejectEnd; else continue
+        3. AllAnalysers: Parallel with 5 ECS analyser branches (mq, dq, bias, explain, shadow)
+        4. EvaluateResults: invoke Lambda to check all required analysers succeeded
+        5. WriteDecision: Choice state — if all_required_ok, route to WriteRegistry; else RejectEnd
+        6. WriteRegistry: invoke Lambda to record baseline approval in DynamoDB
+        7. RejectEnd / SuccessEnd: terminal states
 
         Returns:
             The created state machine.
         """
         props = self._props
+
+        # Build the 5 ECS analyser branches for the Parallel state
         branches: list[dict[str, Any]] = [
             self._branch_definition(analyser=analyser, task_def=task_def, cluster=cluster)
             for analyser, task_def in task_defs.items()
         ]
         parallel_state = {
             "Type": "Parallel",
-            "End": True,
             "Branches": branches,
+            "ResultPath": "$.analyser_results",
+            "Next": "EvaluateResults",
         }
+
+        # LoadAndGate: load manifest + config, gate baseline execution
+        load_and_gate_state = {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+                "FunctionName": self.load_and_gate_fn.function_arn,
+                "Payload": {
+                    "manifest_uri.$": "$.manifest_uri",
+                    "config_uri.$": "$.config_uri",
+                    "project.$": "$.project",
+                },
+            },
+            "ResultPath": "$.gate",
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException",
+                        "Lambda.SdkClientException",
+                        "States.TaskFailed",
+                    ],
+                    "IntervalSeconds": props.sfn_retry_backoff_seconds,
+                    "MaxAttempts": props.sfn_retry_max_attempts,
+                    "BackoffRate": 2.0,
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": ["States.ALL"],
+                    "Next": "FailState",
+                }
+            ],
+            "Next": "ApprovalCheck",
+        }
+
+        # ApprovalCheck: Choice state — check $.gate.status for rejection
+        approval_check_state = {
+            "Type": "Choice",
+            "Choices": [
+                {
+                    "Variable": "$.gate.status",
+                    "StringEquals": "rejected",
+                    "Next": "RejectEnd",
+                }
+            ],
+            "Default": "AllAnalysers",
+        }
+
+        # EvaluateResults: check that required analysers succeeded
+        evaluate_results_state = {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+                "FunctionName": self.evaluate_results_fn.function_arn,
+                "Payload": {
+                    "gate_output.$": "$.gate",
+                    "analyser_results.$": "$.analyser_results",
+                    "required_analysers": list(_ANALYSER_TYPES),
+                },
+            },
+            "ResultPath": "$.eval_output",
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException",
+                        "Lambda.SdkClientException",
+                        "States.TaskFailed",
+                    ],
+                    "IntervalSeconds": props.sfn_retry_backoff_seconds,
+                    "MaxAttempts": props.sfn_retry_max_attempts,
+                    "BackoffRate": 2.0,
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": ["States.ALL"],
+                    "Next": "FailState",
+                }
+            ],
+            "Next": "WriteDecision",
+        }
+
+        # WriteDecision: Choice state — if all_required_ok, continue to WriteRegistry; else reject
+        write_decision_state = {
+            "Type": "Choice",
+            "Choices": [
+                {
+                    "Variable": "$.eval_output.all_required_ok",
+                    "BooleanEquals": True,
+                    "Next": "WriteRegistry",
+                }
+            ],
+            "Default": "RejectEnd",
+        }
+
+        # WriteRegistry: record baseline approval in DynamoDB
+        write_registry_state = {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+                "FunctionName": self.write_registry_fn.function_arn,
+                "Payload": {
+                    "project.$": "$.project",
+                    "model_version.$": "$.model_version",
+                    "status": "approved",
+                    "baseline_prefix.$": "$.baseline_prefix",
+                    "analysers.$": "$.analyser_results",
+                    "manifest_uri.$": "$.manifest_uri",
+                    "sfn_execution_arn.$": "$$.Execution.Arn",
+                },
+            },
+            "ResultPath": "$.write_output",
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException",
+                        "Lambda.SdkClientException",
+                        "States.TaskFailed",
+                    ],
+                    "IntervalSeconds": props.sfn_retry_backoff_seconds,
+                    "MaxAttempts": props.sfn_retry_max_attempts,
+                    "BackoffRate": 2.0,
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": ["States.ALL"],
+                    "Next": "FailState",
+                }
+            ],
+            "Next": "SuccessEnd",
+        }
+
+        # Terminal states
+        reject_end_state = {
+            "Type": "Fail",
+            "Error": "BaselineRejected",
+            "Cause": "Baseline did not meet approval criteria",
+        }
+
+        success_end_state = {"Type": "Succeed"}
+
+        fail_state = {
+            "Type": "Fail",
+            "Error": "BaselineExecutionFailed",
+            "Cause": "A critical baseline process failed",
+        }
+
         definition = {
             "Comment": f"mmc-{env}-{props.project_name}-baseline",
-            "StartAt": "AllAnalysers",
-            "States": {"AllAnalysers": parallel_state},
+            "StartAt": "LoadAndGate",
+            "States": {
+                "LoadAndGate": load_and_gate_state,
+                "ApprovalCheck": approval_check_state,
+                "AllAnalysers": parallel_state,
+                "EvaluateResults": evaluate_results_state,
+                "WriteDecision": write_decision_state,
+                "WriteRegistry": write_registry_state,
+                "RejectEnd": reject_end_state,
+                "SuccessEnd": success_end_state,
+                "FailState": fail_state,
+            },
         }
+
         return sfn.StateMachine(
             self,
             "BaselineStateMachine",
@@ -550,3 +754,64 @@ class OperationsBaselineStack(Stack):
             ),
         )
         return rule
+
+    def _build_baseline_lambdas(
+        self,
+        *,
+        env: str,
+        baselines_bucket: s3.IBucket,
+        kms_key: kms.IKey,
+    ) -> None:
+        """Provision three baseline control Lambdas: LoadAndGate, EvaluateResults, WriteRegistry.
+
+        Args:
+            env: Deployment environment tag.
+            baselines_bucket: Cross-account baselines S3 bucket.
+            kms_key: Cross-account KMS key for S3 encryption.
+        """
+        cdk_src_dir = Path(__file__).resolve().parent.parent
+
+        # LoadAndGateFn: fetch manifest + config, gate baseline execution
+        self.load_and_gate_fn = lambda_.Function(
+            self,
+            "LoadAndGateFn",
+            runtime=lambda_.Runtime.PYTHON_3_12,
+            handler="model_monitor_cdk.load_and_gate.load_and_gate",
+            code=lambda_.Code.from_asset(str(cdk_src_dir)),
+            timeout=Duration.seconds(60),
+            memory_size=512,
+            environment={"ENVIRONMENT": env},
+            description="Load manifest + config, gate baseline execution",
+        )
+        # LoadAndGate reads from S3 URIs passed as input; runtime IAM grants via SFN task role
+        # (no direct bucket access needed at stack provisioning time)
+
+        # EvaluateResultsFn: check that required analysers succeeded
+        self.evaluate_results_fn = lambda_.Function(
+            self,
+            "EvaluateResultsFn",
+            runtime=lambda_.Runtime.PYTHON_3_12,
+            handler="model_monitor_cdk.evaluate_results.evaluate_results",
+            code=lambda_.Code.from_asset(str(cdk_src_dir)),
+            timeout=Duration.seconds(60),
+            memory_size=512,
+            environment={"ENVIRONMENT": env},
+            description="Evaluate analyser results and gate progression",
+        )
+
+        # WriteRegistryFn: record baseline approval in DynamoDB
+        self.write_registry_fn = lambda_.Function(
+            self,
+            "WriteRegistryFn",
+            runtime=lambda_.Runtime.PYTHON_3_12,
+            handler="model_monitor_cdk.write_registry.write_registry",
+            code=lambda_.Code.from_asset(str(cdk_src_dir)),
+            timeout=Duration.seconds(60),
+            memory_size=512,
+            environment={
+                "ENVIRONMENT": env,
+                "BASELINE_REGISTRY_TABLE_NAME": self.registry_table.table_name,
+            },
+            description="Write baseline approval record to registry table",
+        )
+        self.registry_table.grant_write_data(self.write_registry_fn)

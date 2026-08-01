@@ -407,8 +407,76 @@ def test_custom_image_source_hook_bypasses_ecr_validation():
     # This should not raise during construction (validation should be skipped)
     props = _valid_props(
         compute_backend="lambda",
-        analyser_image_uris={a: "not-an-ecr-uri" for a in _ANALYSERS},
+        analyser_image_uris=dict.fromkeys(_ANALYSERS, "not-an-ecr-uri"),
         analyser_image_source=dummy_hook,
     )
     # Validation passed without error
     assert props.analyser_image_source is not None
+
+
+def test_activation_lambda_exists_when_lambda_backend():
+    """When compute_backend='lambda', Activation Lambda should be created."""
+    template = _synth(_valid_props(compute_backend="lambda", baseline_registry_table_name="baseline-registry"))
+    functions = template.find_resources("AWS::Lambda::Function")
+    # Look for the activation Lambda handler
+    activation_fns = [
+        r for r in functions.values() if r["Properties"].get("Handler", "") == "model_monitor_cdk.activation.activation"
+    ]
+    assert len(activation_fns) == 1, f"Expected 1 activation Lambda, found {len(activation_fns)}"
+
+
+def test_activation_lambda_has_ddb_env_var():
+    """Activation Lambda should have BASELINE_REGISTRY_TABLE_NAME env var set."""
+    template = _synth(_valid_props(compute_backend="lambda", baseline_registry_table_name="baseline-registry"))
+    functions = template.find_resources("AWS::Lambda::Function")
+    activation_fns = [
+        r for r in functions.values() if r["Properties"].get("Handler", "") == "model_monitor_cdk.activation.activation"
+    ]
+    assert len(activation_fns) == 1
+    env_vars = activation_fns[0]["Properties"].get("Environment", {}).get("Variables", {})
+    assert "BASELINE_REGISTRY_TABLE_NAME" in env_vars
+    assert env_vars["BASELINE_REGISTRY_TABLE_NAME"] == "baseline-registry"
+
+
+def test_activation_lambda_has_ddb_read_grant():
+    """Activation Lambda should have GetItem + Query permissions on baseline registry table."""
+    template = _synth(_valid_props(compute_backend="lambda", baseline_registry_table_name="baseline-registry"))
+    # Find the activation Lambda role
+    functions = template.find_resources("AWS::Lambda::Function")
+    activation_fns = [
+        r for r in functions.values() if r["Properties"].get("Handler", "") == "model_monitor_cdk.activation.activation"
+    ]
+    assert len(activation_fns) == 1
+    role_ref = activation_fns[0]["Properties"]["Role"]
+    # Extract role logical ID from Fn::GetAtt or Ref
+    if isinstance(role_ref, dict):
+        if "Fn::GetAtt" in role_ref:
+            role_id = role_ref["Fn::GetAtt"][0]
+        elif "Ref" in role_ref:
+            role_id = role_ref["Ref"]
+        else:
+            role_id = str(role_ref)
+    else:
+        role_id = role_ref
+
+    # Find policies attached to this role
+    policies = template.find_resources("AWS::IAM::Policy")
+    found_grant = False
+    for policy in policies.values():
+        if "Roles" not in policy["Properties"]:
+            continue
+        # Check if this policy is attached to the activation Lambda role
+        roles = policy["Properties"]["Roles"]
+        if any(
+            (isinstance(r, dict) and r.get("Ref") == role_id) or (isinstance(r, str) and role_id in r) for r in roles
+        ):
+            # Check if this policy grants dynamodb:GetItem or dynamodb:Query
+            statements = policy["Properties"]["PolicyDocument"].get("Statement", [])
+            for stmt in statements:
+                actions = stmt.get("Action", [])
+                if not isinstance(actions, list):
+                    actions = [actions]
+                if "dynamodb:GetItem" in actions or "dynamodb:Query" in actions:
+                    found_grant = True
+                    break
+    assert found_grant, "Activation Lambda role should have dynamodb:GetItem or dynamodb:Query permission"

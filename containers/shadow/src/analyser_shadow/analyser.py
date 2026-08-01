@@ -176,7 +176,7 @@ class ShadowAnalyser:
     and ``info`` on a clean run.
     """
 
-    def compute(self, inputs: AnalyserInputs, config: dict[str, Any]) -> AnalyserOutput:  # noqa: PLR6301, PLR0914 — protocol; unavoidable locals
+    def compute(self, inputs: AnalyserInputs, config: dict[str, Any]) -> AnalyserOutput:  # ruff: ignore[no-self-use, too-many-locals] — protocol; unavoidable locals
         """Compute the shadow comparison.
 
         Args:
