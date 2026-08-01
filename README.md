@@ -138,6 +138,8 @@ and an AWS profile with credentials for the artifact account.
    $EDITOR cdk/environments/accounts.yaml cdk/environments/projects.yaml
    ```
 
+   **Configuration reference:** See [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) for detailed schema documentation for both files.
+
 2. Bootstrap every account the topology references (one-off per account/region):
 
    ```
