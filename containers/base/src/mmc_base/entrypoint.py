@@ -21,7 +21,7 @@ from mmc_base.contract import AnalyserInputs, AnalyserOutput, EnvContract, Outco
 if TYPE_CHECKING:
     from mmc_base.analyser import Analyser
 
-INPUT_DIR = Path("/tmp/mmc")  # noqa: S108 — container-scoped, not host tmp
+INPUT_DIR = Path("/tmp/mmc")  # ruff: ignore[hardcoded-temp-file] — container-scoped, not host tmp
 ANALYSER_MODULE_ENV = "MMC_ANALYSER_MODULE"
 
 logger = Logger(service="mmc-base")
@@ -141,7 +141,7 @@ def main() -> int:
     try:
         output = _run_analyser(env, INPUT_DIR)
         _emit_success(output, env)
-    except Exception as exc:  # noqa: BLE001 — top-level guard
+    except Exception as exc:  # ruff: ignore[blind-except] — top-level guard
         _emit_failure(exc, env, started_at)
         return 1
     logger.info("analyser run complete", extra={"outcome": output.outcome.value})

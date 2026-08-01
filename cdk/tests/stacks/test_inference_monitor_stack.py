@@ -97,7 +97,7 @@ def _flatten_definition(defn: Any) -> str:
 
 
 def test_state_machine_parallel_with_five_branches():
-    template = _synth()
+    template = _synth(_valid_props(compute_backend="ecs"))
     sms = template.find_resources("AWS::StepFunctions::StateMachine")
     assert len(sms) == 1
     raw = next(iter(sms.values()))["Properties"].get("DefinitionString") or next(iter(sms.values()))["Properties"].get(
@@ -111,7 +111,7 @@ def test_state_machine_parallel_with_five_branches():
 
 
 def test_five_task_definitions_one_per_analyser():
-    template = _synth()
+    template = _synth(_valid_props(compute_backend="ecs"))
     task_defs = template.find_resources("AWS::ECS::TaskDefinition")
     assert len(task_defs) == 5
     families = sorted(r["Properties"]["Family"] for r in task_defs.values())
@@ -257,7 +257,7 @@ def test_scheduler_rejects_five_field_cron_at_synth_time_via_validator():
 
 def test_task_role_policy_grants_kms_decrypt_on_artifact_key():
     """Each Fargate task role must be able to decrypt objects encrypted by the artifact KMS key."""
-    template = _synth()
+    template = _synth(_valid_props(compute_backend="ecs"))
     key_arn = f"arn:aws:kms:eu-west-1:{_ARTIFACT_ACCOUNT}:key/abcd1234"
     for analyser in _ANALYSERS:
         template.has_resource_properties(
@@ -326,3 +326,157 @@ def test_each_parallel_branch_catches_to_distinct_failure_state():
     assert len(set(catch_targets)) == 5, f"Catch targets not distinct: {catch_targets}"
     expected = {f"Branch{a.title()}Failed" for a in _ANALYSERS}
     assert set(catch_targets) == expected
+
+
+def test_synth_ok_with_lambda_backend():
+    """Lambda backend should synth without errors."""
+    _synth(_valid_props(compute_backend="lambda"))
+
+
+def test_lambda_backend_has_zero_ecs_resources():
+    """Lambda backend should have no ECS task definitions or VPCs."""
+    template = _synth(_valid_props(compute_backend="lambda"))
+    task_defs = template.find_resources("AWS::ECS::TaskDefinition")
+    assert len(task_defs) == 0
+    vpcs = template.find_resources("AWS::EC2::VPC")
+    assert len(vpcs) == 0
+
+
+def test_lambda_backend_has_five_lambda_functions():
+    """Lambda backend should create 5 Lambda functions (one per analyser)."""
+    template = _synth(_valid_props(compute_backend="lambda"))
+    functions = template.find_resources("AWS::Lambda::Function")
+    # Note: there may be other Lambdas (notifier, archive_writer, etc), so check
+    # that at least the 5 analyser Lambdas exist by looking for the naming pattern
+    names = {r["Properties"].get("FunctionName", "") for r in functions.values()}
+    analyser_functions = {n for n in names if any(a in n for a in _ANALYSERS)}
+    assert len(analyser_functions) >= 5, f"Expected ≥5 analyser Lambdas, got: {analyser_functions}"
+
+
+def test_lambda_backend_state_machine_invokes_lambda():
+    """Lambda backend state machine should invoke Lambda (not ECS RunTask)."""
+    template = _synth(_valid_props(compute_backend="lambda"))
+    sms = template.find_resources("AWS::StepFunctions::StateMachine")
+    raw = next(iter(sms.values()))["Properties"].get("DefinitionString") or next(iter(sms.values()))["Properties"].get(
+        "DefinitionBody"
+    )
+    text = _flatten_definition(raw)
+    assert "lambda:invoke" in text
+    # Each Lambda task has 1 Retry + Parallel has 1 Retry = at least 5 (one per branch)
+    assert text.count('"Retry"') >= 5
+    assert text.count('"Catch"') == 5
+
+
+def test_ecs_backend_still_works():
+    """ECS backend should still produce exactly the current ECS shape (regression)."""
+    template = _synth(_valid_props(compute_backend="ecs"))
+    task_defs = template.find_resources("AWS::ECS::TaskDefinition")
+    assert len(task_defs) == 5
+    families = sorted(r["Properties"]["Family"] for r in task_defs.values())
+    assert families == sorted(f"mmc-test-{a}" for a in _ANALYSERS)
+    # State machine should use ecs:runTask, not lambda:invoke
+    sms = template.find_resources("AWS::StepFunctions::StateMachine")
+    raw = next(iter(sms.values()))["Properties"].get("DefinitionString") or next(iter(sms.values()))["Properties"].get(
+        "DefinitionBody"
+    )
+    text = _flatten_definition(raw)
+    assert "ecs:runTask" in text
+    assert "lambda:invoke" not in text
+
+
+def test_enable_event_wiring_false_removes_scheduler_and_pipes():
+    """When enable_event_wiring=False, no Scheduler or Pipes resources should be created."""
+    template = _synth(_valid_props(compute_backend="lambda", enable_event_wiring=False))
+    # Should have no EventBridge Scheduler resources
+    schedulers = template.find_resources("AWS::Scheduler::Schedule")
+    assert len(schedulers) == 0
+    # Should have no EventBridge Pipes resources
+    pipes = template.find_resources("AWS::Pipes::Pipe")
+    assert len(pipes) == 0
+
+
+def test_custom_image_source_hook_bypasses_ecr_validation():
+    """When analyser_image_source hook is provided, ECR URI validation should be skipped."""
+    # Just verify that validation doesn't raise an error when hook is set.
+    # The hook itself won't be called in this test, just proving validation is skipped.
+    from unittest.mock import MagicMock
+
+    def dummy_hook(analyser: str) -> MagicMock:
+        raise AssertionError(f"Hook should not be called in validation test: {analyser}")
+
+    # This should not raise during construction (validation should be skipped)
+    props = _valid_props(
+        compute_backend="lambda",
+        analyser_image_uris=dict.fromkeys(_ANALYSERS, "not-an-ecr-uri"),
+        analyser_image_source=dummy_hook,
+    )
+    # Validation passed without error
+    assert props.analyser_image_source is not None
+
+
+def test_activation_lambda_exists_when_lambda_backend():
+    """When compute_backend='lambda', Activation Lambda should be created."""
+    template = _synth(_valid_props(compute_backend="lambda", baseline_registry_table_name="baseline-registry"))
+    functions = template.find_resources("AWS::Lambda::Function")
+    # Look for the activation Lambda handler
+    activation_fns = [
+        r for r in functions.values() if r["Properties"].get("Handler", "") == "model_monitor_cdk.activation.activation"
+    ]
+    assert len(activation_fns) == 1, f"Expected 1 activation Lambda, found {len(activation_fns)}"
+
+
+def test_activation_lambda_has_ddb_env_var():
+    """Activation Lambda should have BASELINE_REGISTRY_TABLE_NAME env var set."""
+    template = _synth(_valid_props(compute_backend="lambda", baseline_registry_table_name="baseline-registry"))
+    functions = template.find_resources("AWS::Lambda::Function")
+    activation_fns = [
+        r for r in functions.values() if r["Properties"].get("Handler", "") == "model_monitor_cdk.activation.activation"
+    ]
+    assert len(activation_fns) == 1
+    env_vars = activation_fns[0]["Properties"].get("Environment", {}).get("Variables", {})
+    assert "BASELINE_REGISTRY_TABLE_NAME" in env_vars
+    assert env_vars["BASELINE_REGISTRY_TABLE_NAME"] == "baseline-registry"
+
+
+def test_activation_lambda_has_ddb_read_grant():
+    """Activation Lambda should have GetItem + Query permissions on baseline registry table."""
+    template = _synth(_valid_props(compute_backend="lambda", baseline_registry_table_name="baseline-registry"))
+    # Find the activation Lambda role
+    functions = template.find_resources("AWS::Lambda::Function")
+    activation_fns = [
+        r for r in functions.values() if r["Properties"].get("Handler", "") == "model_monitor_cdk.activation.activation"
+    ]
+    assert len(activation_fns) == 1
+    role_ref = activation_fns[0]["Properties"]["Role"]
+    # Extract role logical ID from Fn::GetAtt or Ref
+    if isinstance(role_ref, dict):
+        if "Fn::GetAtt" in role_ref:
+            role_id = role_ref["Fn::GetAtt"][0]
+        elif "Ref" in role_ref:
+            role_id = role_ref["Ref"]
+        else:
+            role_id = str(role_ref)
+    else:
+        role_id = role_ref
+
+    # Find policies attached to this role
+    policies = template.find_resources("AWS::IAM::Policy")
+    found_grant = False
+    for policy in policies.values():
+        if "Roles" not in policy["Properties"]:
+            continue
+        # Check if this policy is attached to the activation Lambda role
+        roles = policy["Properties"]["Roles"]
+        if any(
+            (isinstance(r, dict) and r.get("Ref") == role_id) or (isinstance(r, str) and role_id in r) for r in roles
+        ):
+            # Check if this policy grants dynamodb:GetItem or dynamodb:Query
+            statements = policy["Properties"]["PolicyDocument"].get("Statement", [])
+            for stmt in statements:
+                actions = stmt.get("Action", [])
+                if not isinstance(actions, list):
+                    actions = [actions]
+                if "dynamodb:GetItem" in actions or "dynamodb:Query" in actions:
+                    found_grant = True
+                    break
+    assert found_grant, "Activation Lambda role should have dynamodb:GetItem or dynamodb:Query permission"

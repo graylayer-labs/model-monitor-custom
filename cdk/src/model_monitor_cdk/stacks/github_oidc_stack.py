@@ -90,7 +90,7 @@ class GithubOidcStack(Stack):
         construct_id: str,
         *,
         props: GithubOidcStackProps,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,  # ruff: ignore[any-type]
     ) -> None:
         """Wire the OIDC provider and push role.
 

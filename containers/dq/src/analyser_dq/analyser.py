@@ -231,7 +231,7 @@ class DqAnalyser:
     drift. Owns the math.
     """
 
-    def compute(self, inputs: AnalyserInputs, config: dict[str, Any]) -> AnalyserOutput:  # noqa: PLR6301 — protocol
+    def compute(self, inputs: AnalyserInputs, config: dict[str, Any]) -> AnalyserOutput:  # ruff: ignore[no-self-use] — protocol
         """Run DQ checks and return a structured output.
 
         Args:

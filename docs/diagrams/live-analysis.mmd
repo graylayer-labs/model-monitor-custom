@@ -6,9 +6,9 @@ gt("<div style='display:flex;align-items:center;gap:12px;min-width:180px;text-al
 
 cron{"EventBridge<br/>Scheduler (cron)"}
 
-sfn("<div style='display:flex;align-items:center;gap:12px;min-width:180px;text-align:left'><img src='https://api.iconify.design/material-symbols/account-tree-rounded.svg?color=%23A87C9F' width='64' height='64'/><span><b>Step Functions</b><br/>Parallel state<br/><i>ecs:runTask.sync</i></span></div>"):::purple
+sfn("<div style='display:flex;align-items:center;gap:12px;min-width:180px;text-align:left'><img src='https://api.iconify.design/material-symbols/account-tree-rounded.svg?color=%23A87C9F' width='64' height='64'/><span><b>Step Functions</b><br/>Parallel state<br/><i>lambda:invoke</i></span></div>"):::purple
 
-subgraph analysers["Live analysers — ECS Fargate (parallel)"]
+subgraph analysers["Live analysers — Lambda (parallel)"]
   direction TB
   j_mq("<div style='display:flex;align-items:center;gap:8px;min-width:150px;text-align:left'><img src='https://api.iconify.design/material-symbols/deployed-code.svg?color=%23E49444' width='48' height='48'/><span>Model Quality</span></div>"):::orange
   j_dq("<div style='display:flex;align-items:center;gap:8px;min-width:150px;text-align:left'><img src='https://api.iconify.design/material-symbols/deployed-code.svg?color=%23E49444' width='48' height='48'/><span>Data Quality</span></div>"):::orange
@@ -37,7 +37,7 @@ sfn -->|launch: env-override payload| analysers
 snap -.->|container reads| analysers
 cap -.->|container reads| analysers
 gt -.->|container reads| analysers
-ecr -.->|task pulls image| analysers
+ecr -.->|Lambda pulls image| analysers
 
 analysers --> cw
 analysers --> ddb

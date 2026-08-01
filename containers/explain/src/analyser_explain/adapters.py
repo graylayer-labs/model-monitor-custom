@@ -10,7 +10,7 @@ No AWS SDK calls. No ``sagemaker`` imports.
 
 from __future__ import annotations
 
-import pickle  # noqa: S403 — model artefacts are trusted, already fetched by base
+import pickle  # ruff: ignore[suspicious-pickle-import] — model artefacts are trusted, already fetched by base
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
@@ -40,7 +40,7 @@ class SklearnAdapter(ModelAdapter):
             model_uri: Local filesystem path to a pickled sklearn estimator.
         """
         with Path(model_uri).open("rb") as fh:
-            model = pickle.load(fh)  # noqa: S301 — trusted local artefact
+            model = pickle.load(fh)  # ruff: ignore[suspicious-pickle-usage] — trusted local artefact
         self._model = model
         feature_attr = getattr(model, "feature_names_in_", None)
         self._headers = list(feature_attr) if feature_attr is not None else []

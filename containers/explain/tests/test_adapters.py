@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import pickle  # noqa: S403 — trusted local artefacts in test
+import pickle  # ruff: ignore[suspicious-pickle-import] — trusted local artefacts in test
 from pathlib import Path
 
 import numpy as np

@@ -20,7 +20,7 @@ Zero AWS SDK calls; every path returned is on the local filesystem.
 
 from __future__ import annotations
 
-import pickle  # noqa: S403 — model artefact is local + trusted
+import pickle  # ruff: ignore[suspicious-pickle-import] — model artefact is local + trusted
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -135,7 +135,7 @@ def _predict(model: LogisticRegression, features: pd.DataFrame) -> tuple[np.ndar
     return hard, probs[:, positive_idx]
 
 
-def build(out_dir: Path) -> Splits:  # noqa: PLR0914 — one linear script that materialises 9 artefacts
+def build(out_dir: Path) -> Splits:  # ruff: ignore[too-many-locals] — one linear script that materialises 9 artefacts
     """Train the model and materialise every artefact the analysers need.
 
     Args:

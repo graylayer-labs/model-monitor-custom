@@ -57,7 +57,7 @@ def _split_methods(methods: Iterable[str]) -> tuple[list[str], list[str]]:
     return pre, post
 
 
-def _run_stage(  # noqa: PLR0913, PLR0917 — stage args are all required by bias_report
+def _run_stage(  # ruff: ignore[too-many-arguments, too-many-positional-arguments] — stage args are all required by bias_report
     df: pd.DataFrame,
     facet: FacetColumn,
     label: LabelColumn,
@@ -150,9 +150,9 @@ def _score_metric(
     return (threshold is not None and absval > threshold), (alert is not None and absval > alert)
 
 
-def _process_facet(  # noqa: PLR0913, PLR0917 — one call site; splitting hurts readability
+def _process_facet(  # ruff: ignore[too-many-arguments, too-many-positional-arguments] — one call site; splitting hurts readability
     df: pd.DataFrame,
-    facet_spec: Any,  # noqa: ANN401 — Facet from spec module
+    facet_spec: Any,  # ruff: ignore[any-type] — Facet from spec module
     spec: BiasSpec,
     label: LabelColumn,
     predicted: LabelColumn | None,
@@ -210,7 +210,7 @@ class BiasAnalyser:
     ``succeeded``.
     """
 
-    def compute(self, inputs: AnalyserInputs, config: dict[str, Any]) -> AnalyserOutput:  # noqa: PLR6301 — protocol
+    def compute(self, inputs: AnalyserInputs, config: dict[str, Any]) -> AnalyserOutput:  # ruff: ignore[no-self-use] — protocol
         """Run bias metrics against the configured dataset.
 
         Args:

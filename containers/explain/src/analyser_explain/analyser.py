@@ -98,7 +98,7 @@ def _aggregate(shap_values: np.ndarray, method: ExplainAggMethod | AggMethod) ->
     raise ValueError(msg)
 
 
-def _to_2d_shap(raw: Any, n_classes: int) -> np.ndarray:  # noqa: ANN401 — shap returns a union of shapes
+def _to_2d_shap(raw: Any, n_classes: int) -> np.ndarray:  # ruff: ignore[any-type] — shap returns a union of shapes
     """Normalise SHAP output into a ``[n_rows, n_features]`` array.
 
     Multiclass explainers return either a list of per-class arrays or a 3-D
@@ -125,7 +125,7 @@ def _to_2d_shap(raw: Any, n_classes: int) -> np.ndarray:  # noqa: ANN401 — sha
     return arr
 
 
-def _compute_shap(adapter: ModelAdapter, framework: Framework, sample: pd.DataFrame, background: pd.DataFrame) -> Any:  # noqa: ANN401 — shap returns a union of shapes
+def _compute_shap(adapter: ModelAdapter, framework: Framework, sample: pd.DataFrame, background: pd.DataFrame) -> Any:  # ruff: ignore[any-type] — shap returns a union of shapes
     """Run the framework-appropriate SHAP explainer.
 
     Args:

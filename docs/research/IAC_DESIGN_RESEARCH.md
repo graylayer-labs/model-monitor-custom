@@ -106,17 +106,17 @@ Source: AWS CDK Developer Guide + datalake-infrastructure repo.
 
 ```python
 pipeline = pipelines.CodePipeline(
-    self, "Pipeline",
+    self,
+    "Pipeline",
     cross_account_keys=True,
-    synth=pipelines.ShellStep("Synth",
+    synth=pipelines.ShellStep(
+        "Synth",
         input=pipelines.CodePipelineSource.git_hub("org/repo", "main"),
         commands=["pip install -r requirements.txt", "npx cdk synth"],
     ),
 )
-pipeline.add_stage(AppStage(self, "Dev",
-    env=Environment(account="111111111111", region="eu-west-1")))
-pipeline.add_stage(AppStage(self, "Prod",
-    env=Environment(account="222222222222", region="eu-west-1")))
+pipeline.add_stage(AppStage(self, "Dev", env=Environment(account="111111111111", region="eu-west-1")))
+pipeline.add_stage(AppStage(self, "Prod", env=Environment(account="222222222222", region="eu-west-1")))
 ```
 
 **Self-mutation.** Every pipeline run first synths + deploys the pipeline itself; then restarts execution so downstream stages use the new definition. Documented at https://docs.aws.amazon.com/cdk/v2/guide/cdk_pipeline.html (page currently returns near-empty content — this behaviour is CDK canon and observable in datalake-infrastructure's `pipeline_stack.py`).
@@ -276,13 +276,12 @@ from aws_cdk.assertions import Template, Match, Capture
 
 from app.state_machine_stack import StateMachineStack
 
+
 def test_synthesizes_properly():
     app = cdk.App()
     topics_stack = cdk.Stack(app, "TopicsStack")
     topics = [sns.Topic(topics_stack, "Topic1")]
-    state_machine_stack = StateMachineStack(
-        app, "StateMachineStack", topics=topics
-    )
+    state_machine_stack = StateMachineStack(app, "StateMachineStack", topics=topics)
     template = Template.from_stack(state_machine_stack)
 
     template.has_resource_properties(
@@ -356,6 +355,7 @@ So `Tags.of(scope).add(key, value)` **is already an Aspect** under the hood — 
 Canonical Python:
 ```python
 from aws_cdk import App, Tags
+
 app = App()
 Tags.of(app).add("Project", "model-monitor-custom")
 Tags.of(app).add("Environment", target_env)  # dev/test/prod

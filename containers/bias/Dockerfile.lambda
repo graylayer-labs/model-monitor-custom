@@ -1,0 +1,12 @@
+ARG BASE_IMAGE=public.ecr.aws/lambda/python:3.12-x86_64
+
+FROM ${BASE_IMAGE}
+
+WORKDIR ${LAMBDA_TASK_ROOT}
+
+COPY pyproject.toml ./
+COPY src/ ./src/
+
+RUN pip install --no-cache-dir .
+
+ENV MMC_ANALYSER_MODULE=analyser_bias.analyser:BiasAnalyser

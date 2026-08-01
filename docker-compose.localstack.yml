@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  localstack:
+    image: localstack/localstack:latest
+    environment:
+      SERVICES: s3,dynamodb,lambda,stepfunctions,events,iam,logs,sts,cloudwatch,ecr,kms
+      LAMBDA_EXECUTOR: docker
+      DEBUG: 'false'
+    ports:
+      - '4566:4566'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:4566/_localstack/health']
+      interval: 2s
+      timeout: 5s
+      retries: 30

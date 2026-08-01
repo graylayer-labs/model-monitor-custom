@@ -6,9 +6,9 @@ s1("<div style='display:flex;align-items:center;gap:12px;min-width:200px;text-al
 
 evt{"EventBridge<br/>s3:ObjectCreated"}
 
-sfn("<div style='display:flex;align-items:center;gap:12px;min-width:180px;text-align:left'><img src='https://api.iconify.design/material-symbols/account-tree-rounded.svg?color=%23A87C9F' width='64' height='64'/><span><b>Step Functions</b><br/>Parallel state<br/><i>ecs:runTask.sync</i></span></div>"):::purple
+sfn("<div style='display:flex;align-items:center;gap:12px;min-width:180px;text-align:left'><img src='https://api.iconify.design/material-symbols/account-tree-rounded.svg?color=%23A87C9F' width='64' height='64'/><span><b>Step Functions</b><br/>Parallel state<br/><i>lambda:invoke</i></span></div>"):::purple
 
-subgraph analysers["Snapshot analysers — ECS Fargate (parallel)"]
+subgraph analysers["Snapshot analysers — Lambda (parallel)"]
   direction TB
   job_mq("<div style='display:flex;align-items:center;gap:8px;min-width:150px;text-align:left'><img src='https://api.iconify.design/material-symbols/deployed-code.svg?color=%23E49444' width='48' height='48'/><span>Model Quality</span></div>"):::orange
   job_dq("<div style='display:flex;align-items:center;gap:8px;min-width:150px;text-align:left'><img src='https://api.iconify.design/material-symbols/deployed-code.svg?color=%23E49444' width='48' height='48'/><span>Data Quality</span></div>"):::orange
@@ -26,7 +26,7 @@ producer --> s1
 s1 --> evt --> sfn
 sfn -->|launch: env-override payload| analysers
 s1 -.->|container reads| analysers
-ecr -.->|task pulls image| analysers
+ecr -.->|Lambda pulls image| analysers
 analysers --> out
 analysers --> logs
 analysers -.->|Catch| fail

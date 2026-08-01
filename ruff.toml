@@ -49,8 +49,8 @@ exclude = [
 ]
 
 ignore = [
-    "COM812",  # Conflicts with formatter's trailing comma handling
-    "TRY003",  # Enforcing exception messages outside raise is too strict for now
+    "missing-trailing-comma",  # Conflicts with formatter's trailing comma handling
+    "raise-vanilla-args",  # Enforcing exception messages outside raise is too strict for now
 ]
 
 [lint.mccabe]
@@ -60,25 +60,25 @@ max-complexity = 10
 convention = "google"
 
 [lint.per-file-ignores]
-"*.ipynb" = ["E501"]
+"*.ipynb" = ["line-too-long"]
 "**/tests/**/*.py" = [
     "ANN",     # Type hints not required in tests
     "D",       # Docstrings not required in tests
     "DOC",     # Docstring strictness not applied to tests
     "FBT",     # Boolean args are common in parametrize
-    "PLC0415", # Imports inside test functions are a legitimate testing pattern
-    "PLC1901", # Explicit == "" checks are intentional for asserting empty strings
-    "PLC2701", # Importing private names is needed for white-box testing
-    "PLR0904", # Test classes naturally have many test methods
-    "PLR0913", # Pytest fixtures lead to many function arguments
-    "PLR0917", # Pytest fixtures lead to many positional arguments
-    "PLR2004", # Magic values in assertions are intentional
-    "PLR6301", # Methods that could be functions (fixture classes)
-    "S101",    # Asserts are how pytest works
-    "S105",    # Hardcoded passwords are expected in test fixtures
-    "S106",    # Hardcoded passwords are expected in test fixtures
-    "T201",    # print() is useful for test debugging
-    "TRY301",  # Raising inside try is intentional for testing exception handling
+    "import-outside-top-level", # Imports inside test functions are a legitimate testing pattern
+    "compare-to-empty-string", # Explicit == "" checks are intentional for asserting empty strings
+    "import-private-name", # Importing private names is needed for white-box testing
+    "too-many-public-methods", # Test classes naturally have many test methods
+    "too-many-arguments", # Pytest fixtures lead to many function arguments
+    "too-many-positional-arguments", # Pytest fixtures lead to many positional arguments
+    "magic-value-comparison", # Magic values in assertions are intentional
+    "no-self-use", # Methods that could be functions (fixture classes)
+    "assert",    # Asserts are how pytest works
+    "hardcoded-password-string",    # Hardcoded passwords are expected in test fixtures
+    "hardcoded-password-func-arg",    # Hardcoded passwords are expected in test fixtures
+    "print",    # print() is useful for test debugging
+    "raise-within-try",  # Raising inside try is intentional for testing exception handling
 ]
 "**/suites/**/*.py" = [
     "ANN",     # Type hints not required in tests
@@ -86,22 +86,22 @@ convention = "google"
     "DOC",     # Docstring strictness not applied to tests
     "DTZ",     # Timezone-aware datetimes are not critical in test contexts
     "FBT",     # Boolean args are common in parametrize
-    "N802",    # ST-NNN test names use uppercase — deliberate smoke test plan ID traceability
-    "N999",    # ST-NNN module names use uppercase — same reason
-    "PLC0415", # Imports inside test functions are a legitimate testing pattern
-    "PLC1901", # Explicit == "" checks are intentional for asserting empty strings
-    "PLC2701", # Importing private names is needed for white-box testing
-    "PLR0904", # Test classes naturally have many test methods
-    "PLR0913", # Pytest fixtures lead to many function arguments
-    "PLR0915", # E2e test flows are inherently long and procedural
-    "PLR0917", # Pytest fixtures lead to many positional arguments
-    "PLR2004", # Magic values in assertions are intentional
-    "PLR6301", # Methods that could be functions (fixture classes)
-    "S101",    # Asserts are how pytest works
-    "S105",    # Hardcoded passwords are expected in test fixtures
-    "S106",    # Hardcoded passwords are expected in test fixtures
-    "T201",    # print() is useful for test debugging
-    "TRY301",  # Raising inside try is intentional for testing exception handling
+    "invalid-function-name",    # ST-NNN test names use uppercase — deliberate smoke test plan ID traceability
+    "invalid-module-name",    # ST-NNN module names use uppercase — same reason
+    "import-outside-top-level", # Imports inside test functions are a legitimate testing pattern
+    "compare-to-empty-string", # Explicit == "" checks are intentional for asserting empty strings
+    "import-private-name", # Importing private names is needed for white-box testing
+    "too-many-public-methods", # Test classes naturally have many test methods
+    "too-many-arguments", # Pytest fixtures lead to many function arguments
+    "too-many-statements", # E2e test flows are inherently long and procedural
+    "too-many-positional-arguments", # Pytest fixtures lead to many positional arguments
+    "magic-value-comparison", # Magic values in assertions are intentional
+    "no-self-use", # Methods that could be functions (fixture classes)
+    "assert",    # Asserts are how pytest works
+    "hardcoded-password-string",    # Hardcoded passwords are expected in test fixtures
+    "hardcoded-password-func-arg",    # Hardcoded passwords are expected in test fixtures
+    "print",    # print() is useful for test debugging
+    "raise-within-try",  # Raising inside try is intentional for testing exception handling
 ]
 
 [format]

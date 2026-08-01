@@ -86,8 +86,10 @@ def test_state_machine_parallel_with_five_branches():
     raw = props.get("DefinitionString") or props.get("DefinitionBody")
     text = _flatten_definition(raw)
     assert "Parallel" in text
-    assert text.count('"Retry"') == 5
-    assert text.count('"Catch"') == 5
+    # New v2 flow has: LoadAndGate (1) + EvaluateResults (1) + WriteRegistry (1) + 5 ECS branches = 8 Retry blocks
+    # And 8 Catch blocks (3 for Lambda tasks + 5 for ECS branches)
+    assert text.count('"Retry"') == 8, f"Expected 8 Retry blocks, got {text.count('"Retry"')}"
+    assert text.count('"Catch"') == 8, f"Expected 8 Catch blocks, got {text.count('"Catch"')}"
 
 
 def test_five_task_definitions_one_per_analyser():
@@ -144,9 +146,24 @@ def test_task_role_no_direct_put_on_baselines_bucket():
         assert "arn:aws:s3:::mmc-baselines" not in rendered
 
 
-def test_no_dynamodb_table():
+def test_baseline_registry_table_exists():
+    """Registry table is created with correct schema."""
     template = _synth()
-    assert template.find_resources("AWS::DynamoDB::Table") == {}
+    tables = template.find_resources("AWS::DynamoDB::Table")
+    assert len(tables) == 1, f"Expected exactly one DynamoDB table, found {len(tables)}"
+
+
+def test_baseline_registry_table_key_schema():
+    """Registry table has partition key 'project' (HASH) and sort key 'sk' (RANGE)."""
+    template = _synth()
+    tables = template.find_resources("AWS::DynamoDB::Table")
+    table_props = next(iter(tables.values()))["Properties"]
+    key_schema = table_props["KeySchema"]
+
+    # Extract key attributes
+    keys = {ks["AttributeName"]: ks["KeyType"] for ks in key_schema}
+    assert keys.get("project") == "HASH", f"Expected 'project' as HASH key, got {keys}"
+    assert keys.get("sk") == "RANGE", f"Expected 'sk' as RANGE key, got {keys}"
 
 
 def test_no_pipes():
@@ -307,6 +324,163 @@ def test_each_parallel_branch_catches_to_distinct_failure_state():
     assert len(set(catch_targets)) == 5, f"Catch targets not distinct: {catch_targets}"
     expected = {f"Branch{a.title()}Failed" for a in _ANALYSERS}
     assert set(catch_targets) == expected
+
+
+def test_baseline_stack_has_three_lambdas():
+    """Synth the stack and verify exactly 3 Lambda functions are created."""
+    template = _synth()
+    lambdas = template.find_resources("AWS::Lambda::Function")
+    assert len(lambdas) == 3, f"Expected exactly 3 Lambda functions, found {len(lambdas)}"
+
+    # Extract handler names
+    handlers = sorted([r["Properties"]["Handler"] for r in lambdas.values()])
+    expected_handlers = sorted(
+        [
+            "model_monitor_cdk.load_and_gate.load_and_gate",
+            "model_monitor_cdk.evaluate_results.evaluate_results",
+            "model_monitor_cdk.write_registry.write_registry",
+        ]
+    )
+    assert handlers == expected_handlers, f"Handler mismatch. Got {handlers}, expected {expected_handlers}"
+
+
+def test_write_registry_lambda_has_ddb_env_var():
+    """WriteRegistry Lambda must have BASELINE_REGISTRY_TABLE_NAME env var."""
+    template = _synth()
+    lambdas = template.find_resources("AWS::Lambda::Function")
+
+    # Find WriteRegistry Lambda by handler
+    write_registry_lambda = None
+    for lam in lambdas.values():
+        if "write_registry" in lam["Properties"]["Handler"]:
+            write_registry_lambda = lam
+            break
+
+    assert write_registry_lambda is not None, "WriteRegistry Lambda not found"
+
+    env_vars = write_registry_lambda["Properties"].get("Environment", {}).get("Variables", {})
+    assert "BASELINE_REGISTRY_TABLE_NAME" in env_vars, f"Missing BASELINE_REGISTRY_TABLE_NAME. Got: {env_vars}"
+    assert "ENVIRONMENT" in env_vars, f"Missing ENVIRONMENT. Got: {env_vars}"
+
+
+def test_baseline_lambdas_have_iam_grants():
+    """Verify each Lambda has the correct IAM policies."""
+    template = _synth()
+    lambdas = template.find_resources("AWS::Lambda::Function")
+    assert len(lambdas) == 3
+
+    # Collect all IAM policies attached to Lambda roles
+    policies = template.find_resources("AWS::IAM::Policy")
+    policies_text = json.dumps([p["Properties"]["PolicyDocument"] for p in policies.values()])
+
+    # EvaluateResults has no additional grants (reads from SFN state)
+    # LoadAndGate has no direct bucket grants (reads from URIs passed as input)
+
+    # WriteRegistry should have DynamoDB access
+    assert "dynamodb:PutItem" in policies_text, "WriteRegistry missing dynamodb:PutItem"
+
+
+def test_baseline_sfn_starts_with_load_and_gate():
+    """ASL definition must start with LoadAndGate Task state."""
+    template = _synth()
+    sms = template.find_resources("AWS::StepFunctions::StateMachine")
+    assert len(sms) == 1
+    props = next(iter(sms.values()))["Properties"]
+    raw = props.get("DefinitionString") or props.get("DefinitionBody")
+    text = _flatten_definition_for_parse(raw)
+    definition = json.loads(text)
+
+    # StartAt must be LoadAndGate
+    assert definition.get("StartAt") == "LoadAndGate", (
+        f"Expected StartAt='LoadAndGate', got {definition.get('StartAt')}"
+    )
+
+    # LoadAndGate must exist as a Task state with Lambda:invoke resource
+    assert "LoadAndGate" in definition["States"], "LoadAndGate state not found"
+    load_and_gate = definition["States"]["LoadAndGate"]
+    assert load_and_gate["Type"] == "Task", f"LoadAndGate must be a Task, got {load_and_gate.get('Type')}"
+    assert load_and_gate["Resource"] == "arn:aws:states:::lambda:invoke", (
+        f"LoadAndGate resource mismatch: {load_and_gate.get('Resource')}"
+    )
+
+
+def test_baseline_sfn_has_approval_choice():
+    """ASL definition must have ApprovalCheck Choice state that checks $.gate.status."""
+    template = _synth()
+    sms = template.find_resources("AWS::StepFunctions::StateMachine")
+    props = next(iter(sms.values()))["Properties"]
+    raw = props.get("DefinitionString") or props.get("DefinitionBody")
+    text = _flatten_definition_for_parse(raw)
+    definition = json.loads(text)
+
+    # ApprovalCheck must exist as a Choice state
+    assert "ApprovalCheck" in definition["States"], "ApprovalCheck state not found"
+    approval_check = definition["States"]["ApprovalCheck"]
+    assert approval_check["Type"] == "Choice", f"ApprovalCheck must be a Choice, got {approval_check.get('Type')}"
+
+    # Must check $.gate.status for "rejected"
+    choices = approval_check.get("Choices", [])
+    assert len(choices) > 0, "ApprovalCheck must have at least one Choice rule"
+
+    # Find the choice that checks for rejected
+    rejected_found = False
+    for choice in choices:
+        if choice.get("Variable") == "$.gate.status" and choice.get("StringEquals") == "rejected":
+            rejected_found = True
+            break
+    assert rejected_found, f"ApprovalCheck must check '$.gate.status' StringEquals 'rejected', got choices: {choices}"
+
+
+def test_baseline_sfn_flow_complete():
+    """ASL definition must have all expected states and form a valid DAG."""
+    template = _synth()
+    sms = template.find_resources("AWS::StepFunctions::StateMachine")
+    props = next(iter(sms.values()))["Properties"]
+    raw = props.get("DefinitionString") or props.get("DefinitionBody")
+    text = _flatten_definition_for_parse(raw)
+    definition = json.loads(text)
+
+    states = definition["States"]
+
+    # Check all expected states exist
+    expected_states = {
+        "LoadAndGate",
+        "ApprovalCheck",
+        "AllAnalysers",
+        "EvaluateResults",
+        "WriteDecision",
+        "WriteRegistry",
+        "RejectEnd",
+        "SuccessEnd",
+    }
+    actual_states = set(states.keys())
+    assert expected_states.issubset(actual_states), f"Missing states. Expected {expected_states}, got {actual_states}"
+
+    # AllAnalysers must be a Parallel with 5 branches
+    all_analysers = states["AllAnalysers"]
+    assert all_analysers["Type"] == "Parallel", f"AllAnalysers must be Parallel, got {all_analysers.get('Type')}"
+    assert "Branches" in all_analysers, "AllAnalysers missing Branches"
+    assert len(all_analysers["Branches"]) == 5, (
+        f"AllAnalysers must have 5 branches, got {len(all_analysers['Branches'])}"
+    )
+
+    # Verify each branch has mq, dq, bias, explain, shadow analyser names
+    branch_names = set()
+    for branch in all_analysers["Branches"]:
+        # Branch should have states that indicate analyser type
+        branch_states = branch.get("States", {})
+        for state_name in branch_states.keys():
+            if state_name.startswith("Run"):
+                # Extract analyser from state name (e.g., "RunMq" -> "mq")
+                analyser_title = state_name.replace("Run", "")
+                analyser = analyser_title.lower()
+                if analyser in {"mq", "dq", "bias", "explain", "shadow"}:
+                    branch_names.add(analyser)
+
+    expected_analysers = {"mq", "dq", "bias", "explain", "shadow"}
+    assert branch_names == expected_analysers, (
+        f"Branch analysers mismatch. Expected {expected_analysers}, got {branch_names}"
+    )
 
 
 def test_snapshot(snapshot_check):

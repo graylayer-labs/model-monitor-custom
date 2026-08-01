@@ -13,6 +13,7 @@ from __future__ import annotations
 import aws_cdk as cdk
 from model_monitor_cdk.config import resolve_env_from_context
 from model_monitor_cdk.stacks.artifact_stack import ArtifactStack, ArtifactStackProps
+from model_monitor_cdk.stacks.config_stack import ConfigStack
 from model_monitor_cdk.stacks.github_oidc_stack import (
     GithubOidcStack,
     GithubOidcStackProps,
@@ -77,6 +78,14 @@ def build_app(app: cdk.App) -> cdk.App:
         env=cdk.Environment(account=roles.artifact, region=region),
     )
 
+    config_stack = ConfigStack(
+        app,
+        f"MMC-{_ENV_TAG.capitalize()}-Config",
+        region=region,
+        environment=_ENV_TAG,
+        env=cdk.Environment(account=roles.artifact, region=region),
+    )
+
     if accounts.github_oidc is not None:
         oidc = accounts.github_oidc
         GithubOidcStack(
@@ -118,6 +127,7 @@ def build_app(app: cdk.App) -> cdk.App:
                 analyser_image_uris=analyser_images,
                 vpc_id=project.vpc_id,
                 schedule_expression=project.schedule,
+                compute_backend=project.compute_backend,
             ),
             env=cdk.Environment(account=project.inference_account, region=region),
         )

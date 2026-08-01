@@ -1,0 +1,18 @@
+# Base image for Lambda-executed analysers.
+# Uses AWS's official Lambda Python runtime, which includes the Runtime Interface Client.
+# Analyser-specific Dockerfile.lambda files use this as their base.
+
+ARG BASE_IMAGE=public.ecr.aws/lambda/python:3.12
+
+FROM ${BASE_IMAGE}
+
+WORKDIR ${LAMBDA_TASK_ROOT}
+
+COPY pyproject.toml README.md ./
+COPY src/ ./src/
+
+RUN pip install --no-cache-dir .
+
+# Lambda expects the handler to be specified at function creation time, not in the image.
+# This image just bundles the mmc-base package; the Lambda handler is invoked as:
+#   CMD ["mmc_base.lambda_handler.handler"]

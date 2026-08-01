@@ -254,11 +254,13 @@ Cons: coordinated change deploy-repo + train-repo; two config schemas in flight 
 # model_baseline/io/config.py
 from pydantic import BaseModel, Field
 
+
 class ShapConfig(BaseModel):
     nsamples: int = 100
     background_size: int = 50
     feature_columns: list[str]
     class_labels: list[str] | None = None
+
 
 class BaselineConfig(BaseModel):
     """the project-native baseline config. Emitted by train-repo's baseline emitter.
@@ -275,6 +277,7 @@ class BaselineConfig(BaseModel):
             for binary.
         shap: SHAP settings — omitted for bias-only jobs.
     """
+
     schema_version: int = 1
     label_column: str
     predicted_label_column: str | None = None
@@ -332,6 +335,7 @@ from dataclasses import dataclass
 import pandas as pd
 from smclarify.bias.report import bias_report, FacetColumn, LabelColumn, StageType
 from model_baseline.schemas import BaselineResult
+
 
 @dataclass(frozen=True)
 class BiasAnalyzer:
@@ -446,6 +450,7 @@ import numpy as np
 import pandas as pd
 import shap
 
+
 @dataclass(frozen=True)
 class ExplainabilityAnalyzer:
     """Compute global SHAP feature importance via KernelExplainer.
@@ -495,7 +500,8 @@ class ExplainabilityAnalyzer:
         return {
             "global_shap_values": global_shap,
             "expected_value": explainer.expected_value.tolist()
-            if hasattr(explainer.expected_value, "tolist") else explainer.expected_value,
+            if hasattr(explainer.expected_value, "tolist")
+            else explainer.expected_value,
             "config": {
                 "nsamples": self.nsamples,
                 "background_size": self.background_size,
@@ -526,6 +532,7 @@ Concrete approach — vendor via **git subtree or Poetry-style path dependency**
   from example_classifier.inference import model_fn  # vendored path dep or pip
   from model_baseline.model_adapters.base import ModelAdapter
   import numpy as np, torch
+
 
   class BosSeqAdapter(ModelAdapter):
       def load(self, model_dir: Path) -> None:
@@ -637,10 +644,10 @@ class BaselineConstruct(Construct):
         baseline_output_version: int,
         baselines_bucket: IBucket,
         baselines_kms_key: IKey,
-        model_artefact_bucket: IBucket,          # NEW — where model.tar.gz lives
-        model_artefact_key: str,                 # NEW — full key to the model.tar.gz
+        model_artefact_bucket: IBucket,  # NEW — where model.tar.gz lives
+        model_artefact_key: str,  # NEW — full key to the model.tar.gz
         config: BiasConfig | ExplainabilityConfig,
-        image_uri: str,                          # ML_ARTIFACT ECR — model-baseline
+        image_uri: str,  # ML_ARTIFACT ECR — model-baseline
         alerts_topic: ITopic | None = None,
     ) -> None:
         assert monitor_type in {MonitorType.BIAS, MonitorType.EXPLAINABILITY}
@@ -658,7 +665,7 @@ class BaselineConstruct(Construct):
             "MONITOR_TYPE": self.monitor_type.value,
         }
         if self.monitor_type is MonitorType.EXPLAINABILITY:
-            env["MODEL_ADAPTER"] = self.config.model_adapter          # e.g. "example_model"
+            env["MODEL_ADAPTER"] = self.config.model_adapter  # e.g. "example_model"
             env["MODEL_S3_URI"] = f"s3://{self.model_artefact_bucket.bucket_name}/{self.model_artefact_key}"
             env["SHAP_NSAMPLES"] = str(self.config.shap_nsamples)
             env["SHAP_BACKGROUND_K"] = str(self.config.shap_background_k)

@@ -80,7 +80,7 @@ class S3Stub:
         obj = self.objects[bucket, key]
         return {"Body": io.BytesIO(obj.body)}
 
-    def put_object(self, **kwargs: Any) -> dict[str, Any]:  # noqa: ANN401 — boto3 API shape
+    def put_object(self, **kwargs: Any) -> dict[str, Any]:  # ruff: ignore[any-type] — boto3 API shape
         """Record the put; store the body.
 
         Args:
@@ -131,7 +131,7 @@ class DDBStub:
 
     put_items: list[dict[str, Any]] = field(default_factory=list)
 
-    def put_item(self, **kwargs: Any) -> dict[str, Any]:  # noqa: ANN401 — boto3 API shape
+    def put_item(self, **kwargs: Any) -> dict[str, Any]:  # ruff: ignore[any-type] — boto3 API shape
         """Record the put.
 
         Args:
@@ -154,7 +154,7 @@ class CWStub:
 
     calls: list[dict[str, Any]] = field(default_factory=list)
 
-    def put_metric_data(self, **kwargs: Any) -> dict[str, Any]:  # noqa: ANN401 — boto3 API shape
+    def put_metric_data(self, **kwargs: Any) -> dict[str, Any]:  # ruff: ignore[any-type] — boto3 API shape
         """Record the put.
 
         Args:
@@ -170,7 +170,7 @@ class CWStub:
 class NoopAnalyser:
     """Trivial analyser used by the harness and downstream tests."""
 
-    def compute(self, inputs: AnalyserInputs, config: dict[str, Any]) -> AnalyserOutput:  # noqa: PLR6301 — protocol conformance
+    def compute(self, inputs: AnalyserInputs, config: dict[str, Any]) -> AnalyserOutput:  # ruff: ignore[no-self-use] — protocol conformance
         """Return a fixed successful output.
 
         Args:
