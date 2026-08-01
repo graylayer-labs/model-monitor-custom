@@ -1,10 +1,18 @@
 [project]
 name = "mmc-analyser-mq"
-version = "0.1.0"
-description = "MQ analyser image — accuracy / precision / recall / F1 + baseline comparison."
-requires-python = ">=3.12"
+version = "0.2.0"
+description = "Model Monitor quality metrics (MQ) analyser for drift/bias/quality monitoring"
 readme = "README.md"
-license = "Apache-2.0"
+license = {text = "Apache-2.0"}
+authors = [{name = "Eoin McAllister", email = "eoinmc.james@gmail.com"}]
+requires-python = ">=3.12"
+keywords = ["ml-monitoring", "drift-detection", "analyser-mq", "quality-metrics"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.12",
+]
 dependencies = [
     "mmc-base",
     "pandas>=2.0",
@@ -12,6 +20,11 @@ dependencies = [
     "pyarrow>=17.0.0",
     "scikit-learn>=1.4",
 ]
+
+[project.urls]
+Homepage = "https://github.com/graylayer-labs/model-monitor-custom"
+Repository = "https://github.com/graylayer-labs/model-monitor-custom"
+Documentation = "https://github.com/graylayer-labs/model-monitor-custom#readme"
 
 [tool.uv.sources]
 mmc-base = { workspace = true }
