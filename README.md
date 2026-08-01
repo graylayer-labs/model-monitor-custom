@@ -4,8 +4,9 @@ Modern AWS batch analysis system. First use case: replace SageMaker Model Monito
 
 ## Status
 
-**Phase 1 complete** — interfaces, schemas, protocols, fixtures, CI skeleton. All RED tests in place.
-**Phase 2 next** — CDK stacks (`ArtifactStack`, `SharedIamStack`, `InferenceMonitorStack`) with busybox placeholder + first container skeleton. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
+**Production-ready.** v2 Lambda-first compute backend complete and merged to main. Five analysers active (bias, dq, explain, mq, shadow).
+292 tests passing (255 CDK + 37 containers). LocalStack E2E harness ready—no AWS credentials required for local testing.
+Lambda is default compute; ECS available as toggleable option.
 
 ## Architecture at a glance
 
