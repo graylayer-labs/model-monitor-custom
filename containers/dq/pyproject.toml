@@ -1,10 +1,18 @@
 [project]
 name = "mmc-analyser-dq"
-version = "0.1.0"
-description = "Data-quality analyser image — schema, completeness, and distribution drift vs a baseline snapshot."
-requires-python = ">=3.12"
+version = "0.2.0"
+description = "Model Monitor data quality (DQ) analyser for drift/bias/quality monitoring"
 readme = "README.md"
-license = "Apache-2.0"
+license = {text = "Apache-2.0"}
+authors = [{name = "Eoin McAllister", email = "eoinmc.james@gmail.com"}]
+requires-python = ">=3.12"
+keywords = ["ml-monitoring", "drift-detection", "analyser-dq", "data-quality"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.12",
+]
 dependencies = [
     "mmc-base",
     "numpy",
@@ -12,6 +20,11 @@ dependencies = [
     "pyarrow",
     "scipy",
 ]
+
+[project.urls]
+Homepage = "https://github.com/graylayer-labs/model-monitor-custom"
+Repository = "https://github.com/graylayer-labs/model-monitor-custom"
+Documentation = "https://github.com/graylayer-labs/model-monitor-custom#readme"
 
 [tool.uv.sources]
 mmc-base = { workspace = true }
