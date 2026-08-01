@@ -1,6 +1,7 @@
 # 002 — Container base image + analyser pattern
 
 **Status:** Accepted.
+**v2 Update (2026-08-01):** This design remains unchanged. Container base image + contract is compute-agnostic — works identically whether deployed as Lambda (v2 default) or ECS Fargate (v1 option). See `001-iac-layout.md` for compute backend selection.
 **Related:** [`001-iac-layout.md`](001-iac-layout.md), [`003-anti-sagemaker-guardrails.md`](003-anti-sagemaker-guardrails.md), [`../ARCHITECTURE.md`](../ARCHITECTURE.md).
 
 ## Context
