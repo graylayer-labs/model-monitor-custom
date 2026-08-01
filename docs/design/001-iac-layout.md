@@ -19,8 +19,8 @@ Four stacks. Each takes account IDs + role ARNs as inputs — never reads curren
 |---|---|---|
 | `ArtifactStack` | `ml-artifact` | ECR repos (`mmc/<container>`), baselines S3 bucket, KMS key. Cross-account grants published as outputs. |
 | `SharedIamStack` | `ml-artifact` | Cross-account roles: `ml-operations` writes baselines; each `ml-inference-*` reads baselines. |
-| `OperationsBaselineStack` | `ml-operations` | Snapshot analysis: EventBridge S3 rule → SFN Standard → ECS Fargate Parallel branches → S3 output. |
-| `InferenceMonitorStack` | each `ml-inference-*` | Live analysis: EventBridge Scheduler → SFN Standard → ECS Fargate Parallel branches → CW + DDB. DDB Streams → Pipes fan-out. |
+| `OperationsBaselineStack` | `ml-operations` | Snapshot analysis: EventBridge S3 rule → SFN Standard → Lambda Parallel branches (v2) / ECS Fargate (v1 design) → S3 output. v2 Update (2026-08-01): Swapped to Lambda for LocalStack-friendly testing without AWS credentials; ECS available as fallback. |
+| `InferenceMonitorStack` | each `ml-inference-*` | Live analysis: EventBridge Scheduler → SFN Standard → Lambda Parallel branches (v2) / ECS Fargate (v1 design) → CW + DDB. v2 Update: Lambda reduces cold-start latency for episodic monitoring. DDB Streams → Pipes fan-out. |
 
 `PipelineStack` (CDK Pipelines) deferred until team-size 5+ or first prod deploy.
 
@@ -64,7 +64,7 @@ Applied at app level via `Tags.of(app).add(...)`. Per-stack override for `Compon
 
 1. **`ArtifactStack`** — empty ECR repos, baselines bucket, KMS key. No cross-account grants yet.
 2. **`SharedIamStack`** — cross-account roles referencing ArtifactStack outputs.
-3. **`InferenceMonitorStack`** — full runtime shape with **busybox placeholder image** in ECR. Prove SFN → Fargate → S3/DDB wiring end-to-end before any analyser code exists.
+3. **`InferenceMonitorStack`** — full runtime shape with **busybox placeholder image** in ECR. Prove SFN → Lambda (v2) or Fargate (v1) → S3/DDB wiring end-to-end before any analyser code exists. v2 Update: Lambda container-image functions use same image tags as v1, wiring strategy remains similar.
 4. **First container skeleton** — `containers/baseline/` implementing the env-var contract from `ARCHITECTURE.md`. Push real image to ECR, redeploy stack, verify same wiring picks up the new image.
 5. **`OperationsBaselineStack`** — mirror of InferenceMonitorStack for the snapshot flow.
 

@@ -97,7 +97,7 @@ Grounded in the SFN research: teams overwhelmingly launch containers with a smal
 | `OUTPUT_URI` | str | `s3://…` prefix where the container writes results. |
 | `CONFIG_URI` | str | `s3://…/config.json` — full project config as a versioned S3 object. |
 
-**Total payload well under 8 KB** (ECS `ContainerOverrides` limit). No SSM Parameter Store in the runtime path — config lives in S3 as a versioned JSON file, KMS-encrypted, IAM'd. Simpler + trivially reproducible locally.
+**Total payload well under 8 KB** (v1 designed for ECS `ContainerOverrides` limit; v2 Lambda uses same contract, well under 128 KB Lambda payload limit). No SSM Parameter Store in the runtime path — config lives in S3 as a versioned JSON file, KMS-encrypted, IAM'd. Simpler + trivially reproducible locally.
 
 ### Outputs — what the container writes
 
@@ -111,13 +111,13 @@ Plus (direct AWS SDK from container, own IAM):
 
 - **CloudWatch Metrics** — per-analyser namespace, dims `PackageGroupName · SiloId · MonitorType · Variant`.
 - **DynamoDB outcome row** — one per (execution, analyser).
-- **CloudWatch Logs** — automatic via ECS task log driver.
+- **CloudWatch Logs** — automatic: Lambda via CloudWatch Logs integration, or ECS task log driver if ECS backend selected.
 
 ### Failure semantics
 
 Each SFN branch wraps its container task in:
 
-- **Retry** on `States.TaskFailed` / `ECS.AmazonECSException` — max 3 attempts, exponential backoff.
+- **Retry** on `States.TaskFailed` / `Lambda.ServiceException` (v2) or `ECS.AmazonECSException` (v1) — max 3 attempts, exponential backoff.
 - **Catch** on `States.ALL` → routes to a `MarkBranchFailed` state that writes a DDB failure marker.
 
 This satisfies the "one branch dying does not kill siblings" requirement (SFN research §7).
@@ -150,7 +150,7 @@ docker run --rm \
   analyser-bias:latest
 ```
 
-No SFN, no ECS, no CDK — same container, same result.
+Same env-var contract works for local `docker run`, Lambda, or ECS (if selected). No SFN, no CDK required for testing individual analysers.
 
 ## Diagrams
 
@@ -186,8 +186,8 @@ Both mermaid diagrams rendered via [`ufx-mermaid`](https://github.com/EoinMcUF/u
 
 `model-monitor-custom` provides two containers and a CDK library that together replace SageMaker Model Monitor + Clarify:
 
-1. **`containers/baseline`** — one-shot Processing Job that reads a training snapshot + config from S3 and emits `analysis.json` (bias metrics + SHAP feature importance) to S3. Replaces the SageMaker Clarify Processing Job.
-2. **`containers/monitor`** — recurring Processing Job that reads inference data-capture + baseline artefacts, computes drift, and emits CloudWatch metrics + DDB outcome rows. Replaces the SageMaker Model Monitor container.
+1. **`containers/baseline`** — one-shot Lambda (container-image) function that reads a training snapshot + config from S3 and emits `analysis.json` (bias metrics + SHAP feature importance) to S3. Replaces the SageMaker Clarify Processing Job. (v1 used SageMaker Processing Jobs; v2 defaults to Lambda for LocalStack-friendly testing without AWS credentials, with optional ECS fallback.)
+2. **`containers/monitor`** — recurring Lambda (container-image) functions that read inference data-capture + baseline artefacts, compute drift, and emit CloudWatch metrics + DDB outcome rows. Replaces the SageMaker Model Monitor container. (Same v1→v2 migration as baseline.)
 3. **`cdk/`** — CDK constructs that wire both containers into Step Functions, EventBridge, S3, IAM, and CloudWatch. Consumed by a deploy repo (real AWS accounts) or by the `examples/` for local demos.
 
 ## Assumed AWS account topology
@@ -202,7 +202,7 @@ ML Domain
 │                         Publishes cross-account grants to inference planes.
 │
 ├── ml-operations         Training + baseline compute account.
-│                         Owns: training pipelines, baseline Processing Jobs,
+│                         Owns: training pipelines, baseline compute orchestration (v2: Lambda-first SFN),
 │                         GitHub Actions role for CI-driven deploys.
 │                         Writes baselines up to ml-artifact.
 │
@@ -214,7 +214,7 @@ ML Domain
 │
 └── Inference Plane
     ├── ml-inference-test    Test-tier endpoints (per tenant).
-    │                        Runs the monitor container as a Processing Job.
+    │                        Runs the monitor container as Lambda (v2) or Processing Job (v1).
     │                        Emits CW metrics + DDB outcomes.
     │
     └── ml-inference-prod    Prod-tier endpoints (per tenant).
@@ -228,10 +228,10 @@ ML Domain
 | Model artefact (`model.tar.gz`) | `ml-artifact` (S3) | inference planes need `s3:GetObject` + `kms:Decrypt` |
 | ModelPackageGroup | `ml-artifact` (SageMaker) | inference planes need `sagemaker:DescribeModelPackage`, `sagemaker:CreateModel` (RAM share or resource policy) |
 | Monitoring baselines bucket | `ml-artifact` (S3) | `ml-operations` needs `s3:PutObject`; inference planes need `s3:GetObject` |
-| Baseline Processing Job | `ml-operations` (SageMaker) | needs cross-account read of model artefact + KMS decrypt from `ml-artifact` |
+| Baseline orchestration | `ml-operations` (Lambda SFN v2; SageMaker Processing Job v1) | needs cross-account read of model artefact + KMS decrypt from `ml-artifact` |
 | Training pipeline | `ml-operations` (SageMaker) | writes baselines to `ml-artifact`; registers models in `ml-artifact` |
 | Endpoint | `ml-inference-*` (SageMaker) | pulls model via cross-account `CreateModel` from `ml-artifact` |
-| Monitor Processing Job | `ml-inference-*` (SageMaker) | reads baselines from `ml-artifact` (S3+KMS); writes outcomes to local DDB + CW |
+| Monitor execution | `ml-inference-*` (Lambda SFN v2; SageMaker Processing Job v1) | reads baselines from `ml-artifact` (S3+KMS); writes outcomes to local DDB + CW |
 | Backend consumers of predictions | separate accounts (`BACKEND-TEST`, `BACKEND-PROD-LP`) | invoke endpoints via a Silo Invoke Role |
 
 ### Prototype single-account collapse
@@ -242,7 +242,7 @@ For a first deploy, all seven components can live in one account (Data Science o
 
 ### `containers/baseline`
 
-**Trigger:** SageMaker Processing Job launched by a Step Functions state machine.
+**Trigger:** Lambda (v2) or SageMaker Processing Job (v1) launched by a Step Functions state machine.
 
 **Trigger source:** EventBridge rule on `s3:PutObject` for the training snapshot dataset — same pattern as SageMaker Clarify's original wiring, but the state machine is ours.
 
@@ -264,7 +264,7 @@ For a first deploy, all seven components can live in one account (Data Science o
 
 ### `containers/monitor`
 
-**Trigger:** SageMaker Processing Job on a fixed schedule (default hourly).
+**Trigger:** Lambda (v2) or SageMaker Processing Job (v1) on a fixed schedule (default hourly via EventBridge).
 
 **Inputs:**
 - Data capture from inference endpoint (S3).
@@ -290,8 +290,8 @@ Composable CDK v2 constructs published as a Python package.
 
 **Layered constructs:**
 
-- `AnalyzerBaselineConstruct` — SFN + EventBridge + Processing Job that launches the `baseline` container. Takes ECR image URI, role ARNs, S3 bucket references as inputs.
-- `MonitoringScheduleConstruct` — SageMaker Model Monitor schedule (or plain EventBridge cron) that launches the `monitor` container.
+- `AnalyzerBaselineConstruct` — SFN + EventBridge + Lambda (v2, default) or Processing Job (v1) that launches the `baseline` container. Takes ECR image URI, role ARNs, S3 bucket references as inputs. Compute backend configurable via `ProjectSpec.compute_backend`.
+- `MonitoringScheduleConstruct` — EventBridge Scheduler → SFN with Lambda analysers (v2, default), or SageMaker Model Monitor schedule (v1).
 - `OutcomesConstruct` — DDB table + streams + EventBridge Pipes fan-out.
 - `NotifierConstruct` — reference Lambda that consumes outcomes and emits alerts. Ship as example; users bring their own.
 
@@ -314,7 +314,7 @@ Training pipeline                              Monitoring baselines bucket      
         │                                     EventBridge S3 rule                        │
         │                                              │                                 │
         │                                              ▼                                 │
-        │                                    Baseline SFN + Processing Job               │
+        │                                    Baseline SFN + Lambda (v2) / Processing Job (v1)               │
         │                                    (baseline container)                    │
         │                                              │ reads model artefact            │
         │                                              │ (cross-account)                 │
@@ -322,7 +322,7 @@ Training pipeline                              Monitoring baselines bucket      
         │                                    Writes analysis.json ────────────►          │
         │                                                                                │
         │                                                                                ▼
-        │                                    baselines (cross-account S3)      Monitor Processing Job
+        │                                    baselines (cross-account S3)      Monitor Lambda (v2) / Processing Job (v1)
         │                                    ────────────────────────────────► (monitor container)
         │                                                                                │
         │                                                                                ▼
@@ -334,6 +334,6 @@ Every arrow crossing an account boundary is an explicit IAM grant + optional KMS
 ## Non-goals
 
 - **Not a SaaS.** No hosted UI, no vendor backend. Everything runs in your accounts.
-- **Not a replacement for `evidently`, `whylogs`, `Arize`, `Fiddler`, etc.** These are alternatives. This project is the "own it end-to-end on SageMaker Processing Jobs" option.
+- **Not a replacement for `evidently`, `whylogs`, `Arize`, `Fiddler`, etc.** These are alternatives. This project is the "own it end-to-end" option: v2 defaults to Lambda (LocalStack-friendly, no AWS creds for testing) with optional ECS fallback; v1 used SageMaker Processing Jobs.
 - **Not tied to any specific model type.** Users bring a `ModelAdapter` (see `research/BASELINE_CONTAINER_DESIGN.md`).
 - **Not tied to any specific dashboard tool.** CW is one option; users can point Pipes at Datadog / Grafana / anywhere.

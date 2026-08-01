@@ -89,7 +89,7 @@ Every analyser writes to CloudWatch Metrics, CloudWatch Logs, and DynamoDB. Dash
 
 ### What the base image does NOT emit
 
-- Container-level CPU / memory / disk — these come from ECS Fargate managed metrics (namespace `AWS/ECS`, dims `ClusterName` + `ServiceName` + `TaskDefinitionFamily`). Base makes no attempt to shadow them.
+- Container-level CPU / memory / disk — v2 Lambda: from AWS/Lambda namespace (dims `FunctionName`); v1 ECS: from AWS/ECS namespace (dims `ClusterName` + `ServiceName` + `TaskDefinitionFamily`). Base makes no attempt to emit these.
 
 ## Rationale
 

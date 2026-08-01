@@ -40,7 +40,7 @@ for account_id in reader_accounts:
 ```
 
 Each role's ARN is exported as a stack output keyed by account ID; each `InferenceMonitorStack` imports the ARN
-for its own account and uses it as the Processing Job execution role's target for `sts:AssumeRole`.
+for its own account and uses it as the execution role's target for `sts:AssumeRole` (Lambda v2, or Processing Job v1).
 
 The writer role (`mmc-<env>-baseline-writer`) is a single `Role` trusted by `ml-operations` — one writer, one role,
 no fan-out to consider.

@@ -1,6 +1,7 @@
 # 003 — Anti-SageMaker guardrails
 
 **Status:** Accepted.
+**v2 Update (2026-08-01):** Guardrails remain essential. v2 swapped compute from SageMaker Processing Jobs (v1) to Lambda (default) + ECS (fallback), but the anti-SageMaker discipline is even more important: prevents accidental shape creep when porting battle-tested analyser math from ml-core/ml-iac.
 **Related:** [`002-container-base.md`](002-container-base.md), [`../research/SM_MODEL_MONITOR_ASSESSMENT.md`](../research/SM_MODEL_MONITOR_ASSESSMENT.md).
 
 ## Context
@@ -90,7 +91,7 @@ Every new construct / handler / analyser must appear in the affected diagram (`s
 | Opaque failures | Container exits non-zero, no context | Base sidecar (`002`) |
 | Hardcoded MPG wiring | Baseline tied to SageMaker Pipeline + MPG version | Snapshot triggered by S3 write; anything can produce inputs |
 | `/opt/ml/processing/{input,output}` | Clarify container filesystem convention | 3 (grep `/opt/ml/`) |
-| SageMaker execution role | Container inherits SM-managed IAM | 5 (port-header calls it out); ECS Fargate task role is explicit |
+| SageMaker execution role | Container inherits SM-managed IAM | 5 (port-header calls it out); Lambda execution role (v2) / ECS task role (v1) is explicit |
 
 ## Consequences
 

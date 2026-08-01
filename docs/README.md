@@ -19,7 +19,7 @@ Grounded background — the receipts behind the decisions above. Read the digest
 |---|---|
 | [`research/SM_MODEL_MONITOR_ASSESSMENT.md`](research/SM_MODEL_MONITOR_ASSESSMENT.md) | Evidence-backed case for moving off SageMaker Model Monitor + Clarify. |
 | [`research/IAC_DESIGN_RESEARCH.md`](research/IAC_DESIGN_RESEARCH.md) | Multi-account CDK reference architectures. Stacks, deploy tools, naming. Digest → `IAC_DESIGN.md`. |
-| [`research/SFN_FAN_OUT_RESEARCH.md`](research/SFN_FAN_OUT_RESEARCH.md) | Compute + workflow choices. Verdict: ECS Fargate + SFN Standard + Parallel + `ecs:runTask.sync`. |
+| [`research/SFN_FAN_OUT_RESEARCH.md`](research/SFN_FAN_OUT_RESEARCH.md) | Compute + workflow choices — v1 research concluded ECS Fargate + SFN Standard + Parallel. v2 Update (2026-08-01): Implementation changed to Lambda (default) + SFN Standard + Parallel, keeping research as historical reference. |
 | [`research/SFN_STATE_STRUCTURE_RESEARCH.md`](research/SFN_STATE_STRUCTURE_RESEARCH.md) | 5 public reference architectures — Prepare/Publish Lambdas rejected, containers-own-I/O chosen. |
 | [`research/BASELINE_CONTAINER_DESIGN.md`](research/BASELINE_CONTAINER_DESIGN.md) | Deep design spec for the baseline container. Parts superseded by `ARCHITECTURE.md`; kept for provenance. |
 
@@ -30,7 +30,7 @@ Sources + rendered PNGs in [`diagrams/`](diagrams/). D2 for the account grid; Me
 | Diagram | What it shows |
 |---|---|
 | `accounts.png` | AWS account topology (`ml-artifact` / `ml-operations` / `ml-inference-*`). |
-| `snapshot-analysis.png` | One-shot baseline compute — S3 → SFN → Fargate → S3. |
-| `live-analysis.png` | Recurring drift monitoring — cron → SFN → Fargate → CW + DDB → Pipes fan-out. |
+| `snapshot-analysis.png` | One-shot baseline compute — S3 → SFN → Lambda (v2) / Fargate (v1) → S3. |
+| `live-analysis.png` | Recurring drift monitoring — cron → SFN → Lambda (v2) / Fargate (v1) → CW + DDB → Pipes fan-out. |
 
 Every runtime-behaviour PR updates the affected diagram + its source (see `STANDARDS.md` → "Diagrams stay in sync"). Render commands in `STANDARDS.md`.
