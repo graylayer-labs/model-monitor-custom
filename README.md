@@ -8,6 +8,67 @@ Modern AWS batch analysis system. First use case: replace SageMaker Model Monito
 292 tests passing (255 CDK + 37 containers). LocalStack E2E harness ready—no AWS credentials required for local testing.
 Lambda is default compute; ECS available as toggleable option.
 
+## Installation
+
+### Prerequisites
+
+- **AWS CLI** (for real deployments)
+- **Docker** (for LocalStack and container builds)
+- **uv** (Python package manager) — [install](https://docs.astral.sh/uv/getting-started/installation/)
+- **Node.js** (for CDK)
+- **git**
+
+### Quick setup
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/graylayer-labs/model-monitor-custom.git
+   cd model-monitor-custom
+   ```
+
+2. Install Python dependencies:
+   ```bash
+   uv sync --group dev
+   ```
+
+### Try locally (no AWS credentials needed)
+
+Run the LocalStack E2E baseline test:
+
+```bash
+# Start LocalStack
+docker compose -f docker-compose.localstack.yml up -d
+
+# Run E2E tests
+export LOCALSTACK_TEST_ENABLED=1
+uv run pytest tests/e2e/test_localstack_baseline.py -v
+```
+
+No AWS account or credentials needed—LocalStack simulates S3, Lambda, DynamoDB, and CloudWatch locally.
+
+### Deploy to real AWS
+
+Deploying to your AWS accounts requires:
+
+1. **Account setup**: Copy and configure account/project topology:
+   ```bash
+   cp cdk/environments/accounts.example.yaml cdk/environments/accounts.yaml
+   cp cdk/environments/projects.example.yaml cdk/environments/projects.yaml
+   $EDITOR cdk/environments/accounts.yaml cdk/environments/projects.yaml
+   ```
+
+2. **Bootstrap** (one-off per account/region):
+   ```bash
+   uv run cdk bootstrap --profile <your-profile> aws://<account-id>/eu-west-1
+   ```
+
+3. **Deploy**:
+   ```bash
+   uv run cdk deploy '*' --profile <your-profile>
+   ```
+
+See the [First deploy](#first-deploy) section below and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for detailed account topology and permissions setup.
+
 ## Architecture at a glance
 
 Three subsystems coupled only by published JSON schemas.
