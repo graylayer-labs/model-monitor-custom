@@ -40,7 +40,7 @@ def local_image_loader(analyser: str) -> lambda_.DockerImageCode:
     )
 
 
-def build_app(app: cdk.App) -> None:
+def build_app(app: cdk.App) -> cdk.App:
     """Instantiate OperationsBaselineStack and InferenceMonitorStack for LocalStack e2e testing."""
     kms_key_arn = os.environ.get("MMC_TEST_KMS_KEY_ARN", "arn:aws:kms:eu-west-1:000000000000:key/test")
     baselines_bucket_arn = os.environ.get("MMC_TEST_BASELINES_BUCKET_ARN", "arn:aws:s3:::mmc-test-baselines")
@@ -64,7 +64,7 @@ def build_app(app: cdk.App) -> None:
             artifact_kms_key_arn=kms_key_arn,
             baseline_writer_role_arn=baseline_writer_role_arn,
             producer_bucket_arn=producer_bucket_arn,
-            analyser_image_uris={a: f"dummy-{a}" for a in ("mq", "dq", "bias", "explain", "shadow")},
+            analyser_image_uris={a: f"000000000000.dkr.ecr.eu-west-1.amazonaws.com/mmc-{a}:latest" for a in ("mq", "dq", "bias", "explain", "shadow")},
         ),
         env=cdk.Environment(account="000000000000", region="eu-west-1"),
     )
@@ -80,7 +80,7 @@ def build_app(app: cdk.App) -> None:
             artifact_account_id="000000000000",
             artifact_kms_key_arn=kms_key_arn,
             baselines_bucket_arn=baselines_bucket_arn,
-            analyser_image_uris={a: f"dummy-{a}" for a in ("mq", "dq", "bias", "explain", "shadow")},
+            analyser_image_uris={a: f"000000000000.dkr.ecr.eu-west-1.amazonaws.com/mmc-{a}:latest" for a in ("mq", "dq", "bias", "explain", "shadow")},
             compute_backend="lambda",
             enable_event_wiring=False,
             analyser_image_source=local_image_loader,
@@ -88,7 +88,8 @@ def build_app(app: cdk.App) -> None:
         ),
         env=cdk.Environment(account="000000000000", region="eu-west-1"),
     )
+    return app
 
 
 if __name__ == "__main__":
-    build_app(cdk.App())
+    build_app(cdk.App()).synth()

@@ -1,0 +1,117 @@
+b'!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n'
+b'!!                                                                                                                      !!\n'
+b'!!  This software has not been tested with node v26.0.0.                                                                !!\n'
+b'!!  Should you encounter odd runtime issues, please try using one of the supported release before filing a bug report.  !!\n'
+b'!!                                                                                                                      !!\n'
+b'!!  This software is currently running on node v26.0.0.                                                                 !!\n'
+b'!!  As of the current release of this software, supported node releases are:                                            !!\n'
+b'!!  - ^24.0.0 (Planned end-of-life: 2028-04-30)                                                                         !!\n'
+b'!!  - ^22.0.0 (Planned end-of-life: 2027-04-30)                                                                         !!\n'
+b'!!  - ^20.0.0 (Planned end-of-life: 2026-04-30) [DEPRECATED]                                                            !!\n'
+b'!!                                                                                                                      !!\n'
+b'!!  This warning can be silenced by setting the JSII_SILENCE_WARNING_UNTESTED_NODE_VERSION environment variable.        !!\n'
+b'!!                                                                                                                      !!\n'
+b'!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n'
+[WARNING] aws-cdk-lib.aws_lambda.FunctionOptions#logRetention is deprecated.
+  use `logGroup` instead
+  This API will be removed in the next major release.
+[WARNING] aws-cdk-lib.aws_lambda.FunctionOptions#logRetention is deprecated.
+  use `logGroup` instead
+  This API will be removed in the next major release.
+[WARNING] aws-cdk-lib.aws_lambda.FunctionOptions#logRetention is deprecated.
+  use `logGroup` instead
+  This API will be removed in the next major release.
+[WARNING] aws-cdk-lib.aws_lambda.FunctionOptions#logRetention is deprecated.
+  use `logGroup` instead
+  This API will be removed in the next major release.
+[WARNING] aws-cdk-lib.aws_lambda.FunctionOptions#logRetention is deprecated.
+  use `logGroup` instead
+  This API will be removed in the next major release.
+[WARNING] aws-cdk-lib.aws_lambda.FunctionOptions#logRetention is deprecated.
+  use `logGroup` instead
+  This API will be removed in the next major release.
+[WARNING] aws-cdk-lib.aws_lambda.FunctionOptions#logRetention is deprecated.
+  use `logGroup` instead
+  This API will be removed in the next major release.
+[WARNING] aws-cdk-lib.aws_lambda.FunctionOptions#logRetention is deprecated.
+  use `logGroup` instead
+  This API will be removed in the next major release.
+[WARNING] aws-cdk-lib.aws_lambda.FunctionOptions#logRetention is deprecated.
+  use `logGroup` instead
+  This API will be removed in the next major release.
+[WARNING] aws-cdk-lib.aws_lambda.FunctionOptions#logRetention is deprecated.
+  use `logGroup` instead
+  This API will be removed in the next major release.
+current credentials could not be used to assume 'arn:aws:iam::000000000000:role/cdk-hnb659fds-lookup-role-000000000000-us-east-1', but are for the right account. Proceeding anyway.
+b'!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n'
+b'!!                                                                                                                      !!\n'
+b'!!  This software has not been tested with node v26.0.0.                                                                !!\n'
+b'!!  Should you encounter odd runtime issues, please try using one of the supported release before filing a bug report.  !!\n'
+b'!!                                                                                                                      !!\n'
+b'!!  This software is currently running on node v26.0.0.                                                                 !!\n'
+b'!!  As of the current release of this software, supported node releases are:                                            !!\n'
+b'!!  - ^24.0.0 (Planned end-of-life: 2028-04-30)                                                                         !!\n'
+b'!!  - ^22.0.0 (Planned end-of-life: 2027-04-30)                                                                         !!\n'
+b'!!  - ^20.0.0 (Planned end-of-life: 2026-04-30) [DEPRECATED]                                                            !!\n'
+b'!!                                                                                                                      !!\n'
+b'!!  This warning can be silenced by setting the JSII_SILENCE_WARNING_UNTESTED_NODE_VERSION environment variable.        !!\n'
+b'!!                                                                                                                      !!\n'
+b'!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n'
+[WARNING] aws-cdk-lib.aws_lambda.FunctionOptions#logRetention is deprecated.
+  use `logGroup` instead
+  This API will be removed in the next major release.
+[WARNING] aws-cdk-lib.aws_lambda.FunctionOptions#logRetention is deprecated.
+  use `logGroup` instead
+  This API will be removed in the next major release.
+[WARNING] aws-cdk-lib.aws_lambda.FunctionOptions#logRetention is deprecated.
+  use `logGroup` instead
+  This API will be removed in the next major release.
+[WARNING] aws-cdk-lib.aws_lambda.FunctionOptions#logRetention is deprecated.
+  use `logGroup` instead
+  This API will be removed in the next major release.
+[WARNING] aws-cdk-lib.aws_lambda.FunctionOptions#logRetention is deprecated.
+  use `logGroup` instead
+  This API will be removed in the next major release.
+[WARNING] aws-cdk-lib.aws_lambda.FunctionOptions#logRetention is deprecated.
+  use `logGroup` instead
+  This API will be removed in the next major release.
+[WARNING] aws-cdk-lib.aws_lambda.FunctionOptions#logRetention is deprecated.
+  use `logGroup` instead
+  This API will be removed in the next major release.
+[WARNING] aws-cdk-lib.aws_lambda.FunctionOptions#logRetention is deprecated.
+  use `logGroup` instead
+  This API will be removed in the next major release.
+[WARNING] aws-cdk-lib.aws_lambda.FunctionOptions#logRetention is deprecated.
+  use `logGroup` instead
+  This API will be removed in the next major release.
+[WARNING] aws-cdk-lib.aws_lambda.FunctionOptions#logRetention is deprecated.
+  use `logGroup` instead
+  This API will be removed in the next major release.
+ERROR connect ECONNREFUSED 127.0.0.1:4566 (Construct Annotations)
+   MMC-Test-OperationsBaseline-test-model
+   Rule Construct-Annotations::error-annotation
+
+WARNING No cross-stack-reference strength configured, defaulting to "strong". We recommend you set feature flag "@aws-cdk/core:defaultCrossStackReferences" to "both", then deploy everywhere, then set it to "weak". Alternatively, set it to "strong" explicitly to lock in the current producer-protecting behavior. (See: https://github.com/aws/aws-cdk/blob/main/packages/aws-cdk-lib/README.md#reference-strength) (Construct Annotations)
+   MMC-Test-SharedIam
+   Acknowledge with 'Construct-Annotations::@aws-cdk/core:crossStackReferencesDefaultStrong'
+
+WARNING Proper policies need to be attached before pulling from ECR repository, or use 'fromEcrRepository'. (Construct Annotations)
+   MMC-Test-OperationsBaseline-test-model/TaskDefMq/ContainerMq
+   Acknowledge with 'Construct-Annotations::@aws-cdk/aws-ecs:ecrImageRequiresPolicy'
+
+WARNING Proper policies need to be attached before pulling from ECR repository, or use 'fromEcrRepository'. (Construct Annotations)
+   MMC-Test-OperationsBaseline-test-model/TaskDefDq/ContainerDq
+   Acknowledge with 'Construct-Annotations::@aws-cdk/aws-ecs:ecrImageRequiresPolicy'
+
+WARNING Proper policies need to be attached before pulling from ECR repository, or use 'fromEcrRepository'. (Construct Annotations)
+   MMC-Test-OperationsBaseline-test-model/TaskDefBias/ContainerBias
+   Acknowledge with 'Construct-Annotations::@aws-cdk/aws-ecs:ecrImageRequiresPolicy'
+
+WARNING Proper policies need to be attached before pulling from ECR repository, or use 'fromEcrRepository'. (Construct Annotations)
+   MMC-Test-OperationsBaseline-test-model/TaskDefExplain/ContainerExplain
+   Acknowledge with 'Construct-Annotations::@aws-cdk/aws-ecs:ecrImageRequiresPolicy'
+
+WARNING Proper policies need to be attached before pulling from ECR repository, or use 'fromEcrRepository'. (Construct Annotations)
+   MMC-Test-OperationsBaseline-test-model/TaskDefShadow/ContainerShadow
+   Acknowledge with 'Construct-Annotations::@aws-cdk/aws-ecs:ecrImageRequiresPolicy'
+Synthesis finished with errors

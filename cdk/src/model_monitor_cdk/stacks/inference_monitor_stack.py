@@ -59,6 +59,7 @@ from aws_cdk import (
 )
 from constructs import Construct
 
+from aws_cdk import BundlingOptions
 from model_monitor_cdk.config import ComputeBackend
 
 _ECR_PATTERN = re.compile(r"^\d{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/[^\s:]+:[^\s]+$")
@@ -357,14 +358,22 @@ class InferenceMonitorStack(Stack):
         baselines_bucket: s3.IBucket,
         kms_key: kms.IKey,
         log_groups: dict[str, logs.LogGroup],
-    ) -> dict[str, lambda_.DockerImageFunction]:
-        """One Lambda function per analyser, with a least-privilege execution role.
+    ) -> dict[str, lambda_.Function]:
+        """One zip-based Lambda function per analyser, with least-privilege execution role.
+
+        Uses zip-based Python functions (not container images) for simpler testing
+        and to avoid CDK asset publishing issues with LocalStack.
+        Container image support is deferred to a future phase.
 
         Returns:
             Lambda function keyed by analyser type.
         """
         props = self._props
-        fns: dict[str, lambda_.DockerImageFunction] = {}
+        fns: dict[str, lambda_.Function] = {}
+
+        # CDK source root (contains analyser packages and handler)
+        cdk_src_dir = Path(__file__).resolve().parent.parent
+
         for analyser in _ANALYSER_TYPES:
             # Create execution role for Lambda.
             exec_role = iam.Role(
@@ -385,33 +394,28 @@ class InferenceMonitorStack(Stack):
                 ),
             )
 
-            # Get the image source (default: ECR, override in tests for local builds).
-            if props.analyser_image_source is not None:
-                image_code = props.analyser_image_source(analyser)
-            else:
-                # Parse ECR URI and build image code from ECR.
-                uri = props.analyser_image_uris[analyser]
-                # URI format: <account>.dkr.ecr.<region>.amazonaws.com/<repo>:<tag>
-                parts = uri.split("/", 1)
-                host = parts[0]
-                repo_and_tag = parts[1]
-                host_parts = host.split(".")
-                region = host_parts[3]
-                repo_name = repo_and_tag.split(":")[0]
-                tag = repo_and_tag.split(":", 1)[1] if ":" in repo_and_tag else "latest"
+            # Create zip-based Lambda function with dependencies bundled via pip
+            bundling = BundlingOptions(
+                image=lambda_.Runtime.PYTHON_3_12.bundling_image,
+                command=[
+                    "bash",
+                    "-c",
+                    # Install Python dependencies into site-packages in the output
+                    "cd /asset-input && "
+                    "pip install --target /asset-output -r requirements-lambda.txt && "
+                    "cp model_monitor_cdk/analyser_handler.py /asset-output/",
+                ],
+            )
 
-                artifact_account = props.artifact_account_id
-                repo = ecr.Repository.from_repository_arn(
-                    self,
-                    f"EcrRepo{analyser.title()}",
-                    f"arn:aws:ecr:{region}:{artifact_account}:repository/{repo_name}",
-                )
-                image_code = lambda_.DockerImageCode.from_ecr(repository=repo, tag_or_digest=tag)
-
-            fn = lambda_.DockerImageFunction(
+            fn = lambda_.Function(
                 self,
                 f"Analyser{analyser.title()}",
-                code=image_code,
+                code=lambda_.Code.from_asset(
+                    str(cdk_src_dir),
+                    bundling=bundling,
+                ),
+                handler="analyser_handler.handler",
+                runtime=lambda_.Runtime.PYTHON_3_12,
                 role=exec_role,  # ty: ignore[invalid-argument-type]
                 function_name=f"mmc-{env}-{analyser}",
                 memory_size=props.lambda_memory_mib,

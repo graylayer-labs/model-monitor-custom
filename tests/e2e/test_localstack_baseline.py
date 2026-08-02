@@ -44,22 +44,58 @@ def test_localstack_baseline_flow(localstack_resources):
     registry_table_name = localstack_resources["registry_table_name"]
 
     # 1. Bootstrap CDK for LocalStack (idempotent)
-    subprocess.run(
-        ["cdklocal", "bootstrap", "--profile", "localstack"],
-        cwd=str(test_cdk_dir),
-        env={**os.environ, "AWS_PROFILE": "localstack"},
-        check=True,
-        capture_output=True,
-    )
-
-    # 2. Deploy the test CDK app (OperationsBaselineStack + InferenceMonitorStack)
-    deploy_result = subprocess.run(
-        ["cdklocal", "deploy", "--require-approval", "never"],
-        cwd=str(test_cdk_dir),
+    bootstrap_env = {**os.environ}
+    bootstrap_env.update({
+        "AWS_ENDPOINT_URL_S3": "http://localhost:4566",
+        "AWS_ENDPOINT_URL_DYNAMODB": "http://localhost:4566",
+        "AWS_ENDPOINT_URL_STEPFUNCTIONS": "http://localhost:4566",
+        "AWS_ENDPOINT_URL_LAMBDA": "http://localhost:4566",
+        "AWS_ENDPOINT_URL_IAM": "http://localhost:4566",
+        "AWS_ENDPOINT_URL_LOGS": "http://localhost:4566",
+        "AWS_ENDPOINT_URL_STS": "http://localhost:4566",
+        "AWS_ENDPOINT_URL_CLOUDWATCH": "http://localhost:4566",
+        "AWS_ENDPOINT_URL_ECR": "http://localhost:4566",
+        "AWS_ENDPOINT_URL_KMS": "http://localhost:4566",
+    })
+    result = subprocess.run(
+        ["cdklocal", "bootstrap", "aws://000000000000/eu-west-1"],
+        cwd=str(repo_root),
+        env=bootstrap_env,
         capture_output=True,
         text=True,
-        check=True,
     )
+    if result.returncode != 0:
+        print(f"Bootstrap failed with exit code {result.returncode}")
+        print(f"stdout: {result.stdout}")
+        print(f"stderr: {result.stderr}")
+        raise subprocess.CalledProcessError(result.returncode, result.args, result.stdout, result.stderr)
+
+    # 2. Deploy the test CDK app (OperationsBaselineStack + InferenceMonitorStack)
+    deploy_env = {**os.environ}
+    deploy_env.update({
+        "AWS_ENDPOINT_URL_S3": "http://localhost:4566",
+        "AWS_ENDPOINT_URL_DYNAMODB": "http://localhost:4566",
+        "AWS_ENDPOINT_URL_STEPFUNCTIONS": "http://localhost:4566",
+        "AWS_ENDPOINT_URL_LAMBDA": "http://localhost:4566",
+        "AWS_ENDPOINT_URL_IAM": "http://localhost:4566",
+        "AWS_ENDPOINT_URL_LOGS": "http://localhost:4566",
+        "AWS_ENDPOINT_URL_STS": "http://localhost:4566",
+        "AWS_ENDPOINT_URL_CLOUDWATCH": "http://localhost:4566",
+        "AWS_ENDPOINT_URL_ECR": "http://localhost:4566",
+        "AWS_ENDPOINT_URL_KMS": "http://localhost:4566",
+    })
+    deploy_result = subprocess.run(
+        ["cdklocal", "deploy", "--require-approval", "never", "--all"],
+        cwd=str(repo_root),
+        env=deploy_env,
+        capture_output=True,
+        text=True,
+    )
+    if deploy_result.returncode != 0:
+        print(f"Deploy failed with exit code {deploy_result.returncode}")
+        print(f"stdout: {deploy_result.stdout[-2000:]}")
+        print(f"stderr: {deploy_result.stderr[-1000:]}")
+        raise subprocess.CalledProcessError(deploy_result.returncode, deploy_result.args, deploy_result.stdout, deploy_result.stderr)
 
     # 3. Extract baseline state machine ARN from deploy output
     sfn_arn = None
