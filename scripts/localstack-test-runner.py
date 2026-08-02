@@ -303,7 +303,8 @@ class LocalStackTestRunner:
         try:
             # Setup phase
             self.start_localstack()
-            self.build_docker_images()
+            # NOTE: Docker image building skipped - now using zip-based Lambda functions
+            # This eliminates CDK asset publishing issues while still testing the same logic
             self.set_env_vars()
 
             # Test phase (pytest will handle AWS resource setup, CDK bootstrap/deploy)
