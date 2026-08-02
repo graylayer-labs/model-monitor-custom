@@ -37,8 +37,9 @@ def localstack_up():
             )
             if response.returncode == 0:
                 health = json.loads(response.stdout)
-                # Check that key services are ready
-                if health.get("services", {}).get("s3") == "running":
+                # Check that key services are ready (status can be "running" or "available")
+                s3_status = health.get("services", {}).get("s3")
+                if s3_status in ("running", "available"):
                     break
         except Exception:
             pass
@@ -58,11 +59,24 @@ def localstack_up():
 
 @pytest.fixture(scope="session")
 def build_analyser_images(localstack_up):
-    """Build the base Dockerfile.lambda image (analyser images built by CDK)."""
+    """Build the base Dockerfile.lambda image (analyser images built by CDK).
+
+    Note: When running via localstack-test-runner.py, images are pre-built,
+    but we build here to support direct pytest execution.
+    """
     repo_root = Path(__file__).parent.parent.parent
     base_dockerfile = repo_root / "containers" / "base" / "Dockerfile.lambda"
 
-    # Build base image
+    # Check if image already exists (built by test runner)
+    check_result = subprocess.run(
+        ["docker", "image", "inspect", "mmc-base-lambda:latest"],
+        capture_output=True,
+    )
+    if check_result.returncode == 0:
+        # Image already built, skip rebuild
+        return {"base": "mmc-base-lambda:latest"}
+
+    # Build base image from repo root (workspace context needed for dependencies)
     subprocess.run(
         [
             "docker",
@@ -71,9 +85,10 @@ def build_analyser_images(localstack_up):
             str(base_dockerfile),
             "-t",
             "mmc-base-lambda:latest",
-            str(base_dockerfile.parent),
+            str(repo_root),  # Build from repo root for workspace packages
         ],
         check=True,
+        cwd=str(repo_root),
     )
 
     return {"base": "mmc-base-lambda:latest"}

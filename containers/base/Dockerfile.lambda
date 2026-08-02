@@ -8,9 +8,8 @@ FROM ${BASE_IMAGE}
 
 WORKDIR ${LAMBDA_TASK_ROOT}
 
-# Copy workspace packages (built from repo root for full context)
-COPY containers/base/pyproject.toml containers/base/README.md ./
-COPY containers/base/src/ ./src/
+# Copy base package (built from repo root)
+COPY containers/base/ ./
 
 RUN pip install --no-cache-dir .
 
