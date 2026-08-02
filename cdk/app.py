@@ -10,7 +10,11 @@ whatever the profile owns.
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import aws_cdk as cdk
+from aws_cdk import aws_lambda as lambda_
 from model_monitor_cdk.config import resolve_env_from_context
 from model_monitor_cdk.stacks.artifact_stack import ArtifactStack, ArtifactStackProps
 from model_monitor_cdk.stacks.config_stack import ConfigStack
@@ -34,6 +38,35 @@ from model_monitor_cdk.stacks.shared_iam_stack import SharedIamStack, SharedIamS
 
 _ENV_TAG = "test"
 _ANALYSER_NAMES = ("mq", "dq", "bias", "explain", "shadow")
+
+
+def _is_localstack_mode() -> bool:
+    """Detect if running against LocalStack (checking for LocalStack endpoint env vars)."""
+    return bool(os.environ.get("AWS_ENDPOINT_URL_S3"))
+
+
+def _localstack_image_source(analyser: str) -> lambda_.DockerImageCode:
+    """Build Docker image code from local image for LocalStack testing.
+
+    For LocalStack, we use pre-built local Docker images (mmc-{analyser}-lambda:latest)
+    instead of trying to fetch from ECR or publish assets. This avoids S3 asset
+    publishing issues that occur when using container images with CDK + LocalStack.
+
+    Args:
+        analyser: Analyser type (mq, dq, bias, explain, shadow)
+
+    Returns:
+        DockerImageCode referencing the local Docker image
+    """
+    # Local Docker images are pre-built by the test runner or user
+    # Reference them by name; Lambda will use the local Docker daemon
+    return lambda_.DockerImageCode.from_image_asset(
+        directory=str(Path(__file__).parent.parent / f"containers/{analyser}"),
+        file="Dockerfile.lambda",
+        build_args={
+            "BASE_IMAGE": "mmc-base-lambda:latest",  # Pre-built base image
+        },
+    )
 
 
 def _analyser_image_uris(*, artifact_account: str, region: str) -> dict[str, str]:
@@ -113,6 +146,10 @@ def build_app(app: cdk.App) -> cdk.App:
         env=cdk.Environment(account=roles.artifact, region=region),
     )
 
+    # For LocalStack testing, use local Docker images instead of ECR
+    localstack_mode = _is_localstack_mode()
+    image_source = _localstack_image_source if localstack_mode else None
+
     for project in cfg.projects.projects:
         InferenceMonitorStack(
             app,
@@ -128,6 +165,7 @@ def build_app(app: cdk.App) -> cdk.App:
                 vpc_id=project.vpc_id,
                 schedule_expression=project.schedule,
                 compute_backend=project.compute_backend,
+                analyser_image_source=image_source,
             ),
             env=cdk.Environment(account=project.inference_account, region=region),
         )
