@@ -1,8 +1,6 @@
 {
   "app": "uv run python tests/e2e/localstack_app.py",
   "context": {
-    "@aws-cdk/core:disableBootstrapValidation": true,
-    "@aws-cdk/core:newStyleStackSynthesis": true,
-    "@aws-cdk/core:enableStackNameDuplicates": true
+    "@aws-cdk/core:newStyleStackSynthesis": true
   }
 }
