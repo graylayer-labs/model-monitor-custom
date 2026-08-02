@@ -4,13 +4,11 @@ FROM ${BASE_IMAGE}
 
 WORKDIR ${LAMBDA_TASK_ROOT}
 
-# Copy workspace packages (built from repo root)
-COPY containers/base/pyproject.toml /tmp/mmc-base/
-COPY containers/base/src/ /tmp/mmc-base/src/
-COPY containers/shadow/pyproject.toml ./
-COPY containers/shadow/src/ ./src/
+# Copy all workspace packages (built from repo root for full context)
+COPY containers/base/ /tmp/mmc-base/
+COPY containers/shadow/ ./
 
-# Install workspace dependencies first
+# Install base workspace dependency first, then this package
 RUN pip install --no-cache-dir /tmp/mmc-base/ && pip install --no-cache-dir .
 
 ENV MMC_ANALYSER_MODULE=analyser_shadow.analyser:ShadowAnalyser

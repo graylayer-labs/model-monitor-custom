@@ -4,13 +4,10 @@ FROM ${BASE_IMAGE}
 
 WORKDIR ${LAMBDA_TASK_ROOT}
 
-# Copy workspace packages (built from repo root)
-COPY containers/base/pyproject.toml /tmp/mmc-base/
-COPY containers/base/src/ /tmp/mmc-base/src/
-COPY containers/baseline/pyproject.toml /tmp/model-baseline/
-COPY containers/baseline/src/ /tmp/model-baseline/src/
-COPY containers/explain/pyproject.toml ./
-COPY containers/explain/src/ ./src/
+# Copy all workspace packages (built from repo root for full context)
+COPY containers/base/ /tmp/mmc-base/
+COPY containers/baseline/ /tmp/model-baseline/
+COPY containers/explain/ ./
 
 # Install workspace dependencies first (order matters: base, then baseline, then explain)
 RUN pip install --no-cache-dir /tmp/mmc-base/ && \
