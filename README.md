@@ -33,18 +33,22 @@ Lambda is default compute; ECS available as toggleable option.
 
 ### Try locally (no AWS credentials needed)
 
-Run the LocalStack E2E baseline test:
+Run the complete end-to-end test suite with a single command:
 
 ```bash
-# Start LocalStack
-docker compose -f docker-compose.localstack.yml up -d
-
-# Run E2E tests
-export LOCALSTACK_TEST_ENABLED=1
-uv run pytest tests/e2e/test_localstack_baseline.py -v
+python3 scripts/localstack-test-runner.py
 ```
 
-No AWS account or credentials needed—LocalStack simulates S3, Lambda, DynamoDB, and CloudWatch locally.
+This automatically:
+- Starts LocalStack (or checks if it's running)
+- Builds Lambda container images
+- Deploys infrastructure (CDK bootstrap + deploy)
+- Runs baseline and monitor E2E tests
+- Cleans up and reports results
+
+No AWS account or credentials needed—LocalStack simulates S3, Lambda, DynamoDB, Step Functions, and CloudWatch locally.
+
+**For more details**, see [`docs/LOCALSTACK_TESTING.md`](docs/LOCALSTACK_TESTING.md).
 
 ### Deploy to real AWS
 
