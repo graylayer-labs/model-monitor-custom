@@ -237,6 +237,9 @@ class LocalStackTestRunner:
             "AWS_ENDPOINT_URL_CLOUDWATCH": "http://localhost:4566",
             "AWS_ENDPOINT_URL_ECR": "http://localhost:4566",
             "AWS_ENDPOINT_URL_KMS": "http://localhost:4566",
+            # Configure CDK to use LocalStack S3 for assets
+            "CDK_DEFAULT_REGION": self.region,
+            "CDK_DEFAULT_ACCOUNT": "000000000000",
         }
 
     def bootstrap_cdk(self):
