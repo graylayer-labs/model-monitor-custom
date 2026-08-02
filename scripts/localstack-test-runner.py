@@ -172,7 +172,7 @@ class LocalStackTestRunner:
         self.log_success("LocalStack stopped")
 
     def build_docker_images(self):
-        """Build required Docker images."""
+        """Build required Docker images from repo root (workspace context)."""
         self.log("Building Docker images...")
 
         # Build base Dockerfile.lambda
@@ -186,15 +186,15 @@ class LocalStackTestRunner:
                 str(base_dockerfile),
                 "-t",
                 "mmc-base-lambda:latest",
-                str(base_dockerfile.parent),
+                str(self.repo_root),  # Build from repo root for workspace context
             ],
+            cwd=self.repo_root,
         )
         self.log_success("Built mmc-base-lambda:latest")
 
         # Build analyser images
         for analyser in ["mq", "dq", "bias", "explain", "shadow"]:
-            analyser_dir = self.repo_root / "containers" / analyser
-            analyser_dockerfile = analyser_dir / "Dockerfile.lambda"
+            analyser_dockerfile = self.repo_root / "containers" / analyser / "Dockerfile.lambda"
 
             if not analyser_dockerfile.exists():
                 self.log_verbose(f"Skipping {analyser} (Dockerfile.lambda not found)")
@@ -211,8 +211,9 @@ class LocalStackTestRunner:
                     f"mmc-{analyser}-lambda:latest",
                     "--build-arg",
                     "BASE_IMAGE=mmc-base-lambda:latest",
-                    str(analyser_dir),
+                    str(self.repo_root),  # Build from repo root for workspace context
                 ],
+                cwd=self.repo_root,
             )
             self.log_success(f"Built mmc-{analyser}-lambda:latest")
 

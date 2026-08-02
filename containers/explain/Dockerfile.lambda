@@ -4,9 +4,17 @@ FROM ${BASE_IMAGE}
 
 WORKDIR ${LAMBDA_TASK_ROOT}
 
-COPY pyproject.toml ./
-COPY src/ ./src/
+# Copy workspace packages (built from repo root)
+COPY containers/base/pyproject.toml /tmp/mmc-base/
+COPY containers/base/src/ /tmp/mmc-base/src/
+COPY containers/baseline/pyproject.toml /tmp/model-baseline/
+COPY containers/baseline/src/ /tmp/model-baseline/src/
+COPY containers/explain/pyproject.toml ./
+COPY containers/explain/src/ ./src/
 
-RUN pip install --no-cache-dir .
+# Install workspace dependencies first (order matters: base, then baseline, then explain)
+RUN pip install --no-cache-dir /tmp/mmc-base/ && \
+    pip install --no-cache-dir /tmp/model-baseline/ && \
+    pip install --no-cache-dir .
 
 ENV MMC_ANALYSER_MODULE=analyser_explain.analyser:ExplainAnalyser
