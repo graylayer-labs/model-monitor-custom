@@ -1,0 +1,2 @@
+/bin/sh: tests/e2e/localstack_app.py: Permission denied
+tests/e2e/localstack_app.py: Subprocess exited with error 126

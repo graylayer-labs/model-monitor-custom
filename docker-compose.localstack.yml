@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   localstack:
-    image: localstack/localstack:latest
+    image: localstack/localstack:2.3.2
     environment:
       SERVICES: s3,dynamodb,lambda,stepfunctions,events,iam,logs,sts,cloudwatch,ecr,kms
       LAMBDA_EXECUTOR: docker
