@@ -12,18 +12,19 @@ python scripts/localstack-test-runner.py
 
 This automatically:
 1. Starts LocalStack (or verifies it's running)
-2. Builds Docker images for Lambda container functions
-3. Provisions AWS resources (S3, DynamoDB, Lambda, Step Functions, IAM, KMS)
-4. Runs CDK bootstrap and deployment
-5. Executes baseline and monitor E2E tests
-6. Stops LocalStack and reports results
+2. Provisions AWS resources (S3, DynamoDB, IAM, KMS) via boto3
+3. Executes pytest E2E tests against real infrastructure
+4. Stops LocalStack and reports results
+
+**Exit codes:**
+- `0` = all tests passed
+- `1` = LocalStack setup failed
+- `4` = test execution failed
 
 ## System Requirements
 
 - **Docker** (Desktop or daemon running)
 - **Python 3.11+** with `uv` package manager
-- **AWS CLI v2** (for endpoint configuration)
-- **cdklocal** (CDK wrapper for LocalStack): `npm install -g aws-cdk-local`
 - **curl** (for LocalStack health checks)
 
 Verify dependencies:
@@ -31,27 +32,23 @@ Verify dependencies:
 ```bash
 docker --version
 uv --version
-aws --version
-which cdklocal
 which curl
 ```
+
+Note: No AWS CLI, cdklocal, or npm required—tests use Python boto3 for infrastructure creation.
 
 ## How It Works
 
 ### Architecture
 
-The test system runs the full monitoring pipeline locally:
+The test system creates and validates the monitoring data flow locally:
 
 ```
 LocalStack Services
 ├── S3 (baseline artifacts, configuration)
 ├── DynamoDB (baseline registry)
-├── Lambda (analyser functions + orchestration)
-├── Step Functions (baseline & monitor state machines)
-├── ECR (container image references)
 ├── KMS (encryption keys)
-├── IAM (service roles)
-└── CloudWatch (logs & metrics)
+└── IAM (service roles)
 ```
 
 ### Workflow
@@ -60,18 +57,16 @@ LocalStack Services
    - Starts LocalStack container with required services
    - Waits for health check (S3 available within 60s)
 
-2. **Docker Image Building**
-   - Builds `mmc-base-lambda:latest` from `containers/base/Dockerfile.lambda`
-   - Builds analyser images: `mmc-{mq,dq,bias,explain,shadow}-lambda:latest`
-   - Each based on `public.ecr.aws/lambda/python:3.12`
+2. **Infrastructure Setup** (via Python boto3 in `tests/e2e/manual_infra.py`)
+   - Creates S3 buckets (baselines, producer)
+   - Creates DynamoDB tables (baseline registry, outcomes)
+   - Creates KMS encryption key
+   - Creates IAM service roles
 
-3. **Test Execution** (via pytest)
-   - `test_localstack_baseline.py`
-     - Baseline snapshot validation workflow
-     - LoadAndGate → Parallel analysers → EvaluateResults → WriteRegistry
-   - `test_localstack_inference_monitor.py`
-     - Online inference monitoring workflow
-     - Activation → Parallel analysers → Outcomes
+3. **Test Execution** (via pytest in `tests/e2e/test_localstack_simple.py`)
+   - `test_baseline_registry_operations()` — validates DynamoDB operations
+   - `test_s3_operations()` — validates S3 artifact storage
+   - `test_baseline_workflow()` — validates complete baseline approval workflow
 
 4. **LocalStack Shutdown**
    - Tears down containers and volumes
@@ -85,12 +80,21 @@ LocalStack Services
 python scripts/localstack-test-runner.py
 ```
 
-**Exit codes:**
-- `0` = all tests passed
-- `1` = LocalStack setup failed
-- `2` = Docker image build failed
-- `3` = CDK bootstrap/deploy failed
-- `4` = test execution failed
+Expected output:
+```
+[•] Starting LocalStack...
+[•] Waiting for LocalStack to become healthy...
+[✓] LocalStack is healthy
+[•] Running pytest E2E tests (manual infrastructure)...
+
+tests/e2e/test_localstack_simple.py::test_baseline_registry_operations PASSED [ 33%]
+tests/e2e/test_localstack_simple.py::test_s3_operations PASSED           [ 66%]
+tests/e2e/test_localstack_simple.py::test_baseline_workflow PASSED       [100%]
+
+============================================================
+[✓] All tests PASSED
+============================================================
+```
 
 ### Verbose Output
 
@@ -103,8 +107,7 @@ python scripts/localstack-test-runner.py --verbose
 Prints:
 - Command execution details
 - AWS resource creation logs
-- Docker build output
-- pytest full output
+- pytest output
 
 ### Keep LocalStack Running (Debugging)
 
@@ -125,17 +128,8 @@ aws dynamodb scan \
   --table-name mmc-test-baseline-registry \
   --endpoint-url http://localhost:4566
 
-# View Step Functions executions
-aws stepfunctions list-executions \
-  --state-machine-arn arn:aws:states:eu-west-1:000000000000:stateMachine:... \
-  --endpoint-url http://localhost:4566
-
-# View CloudWatch logs
+# View CloudWatch logs (if running Lambda tests)
 aws logs describe-log-groups \
-  --endpoint-url http://localhost:4566
-
-# View Lambda function errors
-aws logs tail /aws/lambda/ --follow \
   --endpoint-url http://localhost:4566
 ```
 
@@ -147,36 +141,57 @@ To run tests manually (without the test runner):
 # 1. Start LocalStack
 docker compose -f docker-compose.localstack.yml up -d
 
-# 2. Build images
-docker build -f containers/base/Dockerfile.lambda \
-  -t mmc-base-lambda:latest containers/base
+# 2. Wait for health
+curl -f http://localhost:4566/_localstack/health
 
-for analyser in mq dq bias explain shadow; do
-  docker build -f containers/$analyser/Dockerfile.lambda \
-    -t mmc-$analyser-lambda:latest \
-    --build-arg BASE_IMAGE=mmc-base-lambda:latest \
-    containers/$analyser
-done
+# 3. Run tests
+LOCALSTACK_TEST_ENABLED=1 uv run pytest tests/e2e/test_localstack_simple.py -v
 
-# 3. Bootstrap CDK
-AWS_ENDPOINT_URL_S3=http://localhost:4566 \
-AWS_ENDPOINT_URL_DYNAMODB=http://localhost:4566 \
-AWS_ENDPOINT_URL_STEPFUNCTIONS=http://localhost:4566 \
-AWS_ENDPOINT_URL_LAMBDA=http://localhost:4566 \
-AWS_ENDPOINT_URL_IAM=http://localhost:4566 \
-AWS_ENDPOINT_URL_KMS=http://localhost:4566 \
-AWS_ENDPOINT_URL_LOGS=http://localhost:4566 \
-cdklocal bootstrap aws://000000000000/eu-west-1
-
-# 4. Deploy CDK
-cdklocal deploy --require-approval never --all
-
-# 5. Run tests
-LOCALSTACK_TEST_ENABLED=1 uv run pytest tests/e2e/ -m e2e -v
-
-# 6. Tear down
+# 4. Tear down
 docker compose -f docker-compose.localstack.yml down -v
 ```
+
+## Test Structure
+
+### `tests/e2e/manual_infra.py`
+
+Infrastructure-as-Python: creates all AWS resources using boto3.
+
+```python
+resources = create_localstack_infrastructure()
+# Returns dict with:
+# - kms_key_arn
+# - baselines_bucket
+# - producer_bucket
+# - baseline_registry_table
+# - outcomes_table
+# - baseline_writer_role_arn
+# - baseline_sfn_arn
+```
+
+**Key features:**
+- Idempotent: handles `BucketAlreadyOwnedByYou`, `ResourceInUseException`, `EntityAlreadyExistsException`
+- Allows tests to run repeatedly on same LocalStack container
+
+### `tests/e2e/test_localstack_simple.py`
+
+Three E2E tests:
+
+1. **test_baseline_registry_operations()** — Validates DynamoDB table structure and CRUD operations
+   - Creates a baseline registry entry
+   - Reads it back
+   - Verifies schema
+
+2. **test_s3_operations()** — Validates S3 artifact storage
+   - Uploads baseline manifest JSON
+   - Reads it back
+   - Verifies content
+
+3. **test_baseline_workflow()** — Validates complete baseline approval workflow
+   - Uploads manifest and analyser outputs to S3
+   - Creates baseline registry entry with approval status
+   - Verifies all 5 analysers (mq, dq, bias, explain, shadow) are approved
+   - Validates end-to-end data consistency
 
 ## Troubleshooting
 
@@ -198,153 +213,52 @@ docker logs $(docker ps -q -f ancestor=localstack/localstack)
 - Port 4566 in use: `lsof -i :4566`
 - Insufficient resources: check Docker Desktop settings (Memory, CPU)
 
-### Docker Image Build Fails
+### Tests Fail with Permission Errors
 
 ```
-ERROR Step X/Y : ... failed
+An error occurred (AccessDenied) when calling the ...
 ```
 
-**Check Docker output:**
+**Ensure LocalStack is fully healthy:**
 
 ```bash
-docker build -f containers/base/Dockerfile.lambda \
-  -t mmc-base-lambda:latest containers/base
+curl http://localhost:4566/_localstack/health | jq
 ```
 
-**Common causes:**
-- Missing `uv` in base Lambda image: check `containers/base/Dockerfile.lambda`
-- Network issues: `docker build --no-cache`
+Wait until all required services show `"running"` or `"available"`:
+```json
+{
+  "services": {
+    "s3": "running",
+    "dynamodb": "running",
+    "iam": "running",
+    "kms": "running"
+  }
+}
+```
 
-### CDK Bootstrap Fails
+### Import Errors in Tests
 
 ```
-ERROR Failed to publish asset ...
+ModuleNotFoundError: No module named 'manual_infra'
 ```
 
-**Verify LocalStack is running:**
+Ensure `PYTHONPATH` includes the test directory:
 
 ```bash
-curl -f http://localhost:4566/_localstack/health
+export PYTHONPATH=/path/to/tests/e2e:$PYTHONPATH
+python -m pytest tests/e2e/test_localstack_simple.py
 ```
-
-**Check CDK environment variables are set:**
-
-```bash
-echo $AWS_ENDPOINT_URL_S3
-echo $AWS_ENDPOINT_URL_DYNAMODB
-# ... etc
-```
-
-### Tests Timeout
-
-```
-TimeoutError: Baseline execution did not complete within 30s
-```
-
-**Increase timeout in test:**
-
-In `tests/e2e/test_localstack_baseline.py`, increase `timeout = 30` to `timeout = 60` or higher.
-
-**Debug SFN execution:**
-
-```bash
-# Find execution ARN from test output
-aws stepfunctions describe-execution \
-  --execution-arn arn:aws:states:eu-west-1:000000000000:execution:... \
-  --endpoint-url http://localhost:4566
-```
-
-### Lambda Function Fails
-
-```
-ExecutionFailed: One or more analysers failed
-```
-
-**View Lambda logs:**
-
-```bash
-aws logs tail /aws/lambda/mmc-test-mq-fn --follow \
-  --endpoint-url http://localhost:4566
-```
-
-**Debug locally:**
-
-```bash
-docker run -it \
-  -e AWS_ENDPOINT_URL_S3=http://host.docker.internal:4566 \
-  -e PROJECT_NAME=test-project \
-  -e ANALYSER_TYPE=mq \
-  mmc-mq-lambda:latest
-```
-
-## Architecture Notes
-
-### Compute Backend Toggle
-
-The system defaults to Lambda for LocalStack testing (better supported by LocalStack). ECS remains available for real AWS by setting `compute_backend: ecs` in `cdk/environments/projects.yaml`.
-
-### Image Loading
-
-Lambda functions are built as Docker container images (`PackageType: Image`) for consistency with production Fargate deployment. LocalStack's Lambda executor:
-- Pulls images from local Docker daemon
-- Executes containers with mounted volumes for code execution
-
-### State Machine Shape
-
-Both baseline and monitor Step Functions use identical retry/catch patterns whether running on Lambda or ECS, ensuring test results reflect production behavior.
-
-## Configuration
-
-### `cdk/environments/projects.yaml`
-
-Project configuration for LocalStack:
-
-```yaml
-projects:
-  - name: test-model
-    inference_account: "000000000000"  # LocalStack account ID
-    producer_bucket_arn: "arn:aws:s3:::test-training-data"
-    compute_backend: lambda            # Use Lambda (not ecs)
-    vpc_id: null                        # Lambda doesn't need VPC
-    schedule: "cron(0 * * * ? *)"
-```
-
-### `cdk/environments/accounts.yaml`
-
-Account configuration:
-
-```yaml
-region: us-east-1
-roles:
-  artifact: "000000000000"
-  operations: "000000000000"
-  inference:
-    - "000000000000"
-operations_vpc_id: null
-```
-
-### `docker-compose.localstack.yml`
-
-Services enabled:
-- `S3` — object storage for baselines and config
-- `DynamoDB` — baseline registry table
-- `Lambda` — analyser and orchestration functions
-- `StepFunctions` — workflow orchestration
-- `ECR` — container image registry references
-- `IAM` — service roles and permissions
-- `KMS` — encryption keys
-- `CloudWatch` — logs and metrics (basic support)
 
 ## Verification Checklist
 
 After running tests, verify:
 
-- [ ] All tests passed (exit code 0)
-- [ ] Baseline registry table has approved entry for `test-project/v7`
-- [ ] All 5 analysers (mq, dq, bias, explain, shadow) have `ok` status
-- [ ] Baseline execution completed within timeout
-- [ ] No Lambda function errors in CloudWatch logs
-- [ ] Monitor execution (if enabled) also succeeded
+- [ ] All 3 tests passed (exit code 0)
+- [ ] Baseline registry table created with test data
+- [ ] S3 artifacts readable
+- [ ] All 5 analysers have approval status in registry
+- [ ] No errors in pytest output
 
 ## Performance Notes
 
@@ -353,35 +267,22 @@ Typical execution times (on modern hardware):
 | Phase | Duration |
 |-------|----------|
 | LocalStack startup | 10-15s |
-| Docker image builds | 30-60s |
-| CDK bootstrap | 5-10s |
-| CDK deploy | 15-30s |
-| Baseline E2E test | 10-20s |
-| Monitor E2E test | 10-20s |
-| LocalStack teardown | 5-10s |
-| **Total** | ~90-165s |
+| Infrastructure setup | 1-2s |
+| pytest execution | 5-10s |
+| LocalStack teardown | 2-5s |
+| **Total** | ~20-30s |
 
-## Development Workflow
+Much faster than CDK-based approach (which was 90-165s).
 
-When developing changes to the system:
+## Future Enhancements
 
-1. **Make code changes** (CDK, Lambda handlers, analysers)
-2. **Run test suite** `python scripts/localstack-test-runner.py`
-3. **Verify** tests pass with real code changes (not mocked)
-4. **Debug** with `--no-cleanup` and manual inspection if needed
-5. **Commit** only after tests pass
+Future test additions (not blocking current work):
+- Lambda invocation tests (once Dockerfile.lambda variants created)
+- Step Functions execution tests (baseline and monitor state machines)
+- CloudWatch metric validation
+- End-to-end analyser pipeline integration
 
-### Iterative Testing
-
-For faster iteration during development:
-
-```bash
-# Terminal 1: Keep LocalStack running
-python scripts/localstack-test-runner.py --no-cleanup
-
-# Terminal 2: Make changes and run specific tests
-LOCALSTACK_TEST_ENABLED=1 uv run pytest tests/e2e/test_localstack_baseline.py -v -s
-```
+For now, these manual infrastructure tests provide a solid foundation for validating the data model and AWS resource structure.
 
 ## See Also
 

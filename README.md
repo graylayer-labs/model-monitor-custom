@@ -41,12 +41,12 @@ python3 scripts/localstack-test-runner.py
 
 This automatically:
 - Starts LocalStack (or checks if it's running)
-- Builds Lambda container images
-- Deploys infrastructure (CDK bootstrap + deploy)
-- Runs baseline and monitor E2E tests
-- Cleans up and reports results
+- Creates test infrastructure (S3 buckets, DynamoDB tables, IAM roles, KMS keys)
+- Runs E2E tests (no CDK bootstrap/deploy needed)
+- Verifies baseline registry and data flow
+- Cleans up
 
-No AWS account or credentials needed—LocalStack simulates S3, Lambda, DynamoDB, Step Functions, and CloudWatch locally.
+No AWS account or credentials needed—LocalStack simulates S3, DynamoDB, and other AWS services locally.
 
 **For more details**, see [`docs/LOCALSTACK_TESTING.md`](docs/LOCALSTACK_TESTING.md).
 
