@@ -295,7 +295,7 @@ def handler(event, context):
         function_arn = fn_resp["FunctionArn"] if "FunctionArn" in fn_resp else fn_resp["Configuration"]["FunctionArn"]
 
     # 4. Wait for function to be active (LocalStack async initialization)
-    max_attempts = 10
+    max_attempts = 20
     for attempt in range(max_attempts):
         try:
             fn_info = lambda_client.get_function(FunctionName=function_arn)
@@ -303,17 +303,25 @@ def handler(event, context):
                 break
         except Exception:
             pass
-        time.sleep(0.5)
+        time.sleep(1)  # Increased wait time for LocalStack initialization
 
-    # 5. Invoke the Lambda function
-    invoke_resp = lambda_client.invoke(
-        FunctionName=function_arn,
-        InvocationType="RequestResponse",
-        Payload=json.dumps({
-            "analyser_type": "mq",
-            "run_id": "test-run-123"
-        }),
-    )
+    # 5. Invoke the Lambda function (with retry for Pending state)
+    invoke_resp = None
+    for attempt in range(5):
+        try:
+            invoke_resp = lambda_client.invoke(
+                FunctionName=function_arn,
+                InvocationType="RequestResponse",
+                Payload=json.dumps({
+                    "analyser_type": "mq",
+                    "run_id": "test-run-123"
+                }),
+            )
+            break
+        except lambda_client.exceptions.ResourceConflictException:
+            time.sleep(1)
+
+    assert invoke_resp is not None, "Lambda invocation failed after retries"
 
     # 6. Verify response
     assert invoke_resp["StatusCode"] == 200
