@@ -18,8 +18,6 @@ Usage:
 Exit codes:
     0 = all tests passed
     1 = LocalStack setup failed
-    2 = Docker image build failed
-    3 = CDK bootstrap/deploy failed
     4 = test execution failed
 """
 
@@ -171,51 +169,6 @@ class LocalStackTestRunner:
         )
         self.log_success("LocalStack stopped")
 
-    def build_docker_images(self):
-        """Build required Docker images from repo root (workspace context)."""
-        self.log("Building Docker images...")
-
-        # Build base Dockerfile.lambda
-        base_dockerfile = self.repo_root / "containers" / "base" / "Dockerfile.lambda"
-        self.log("Building mmc-base-lambda image...")
-        self.run_cmd(
-            [
-                "docker",
-                "build",
-                "-f",
-                str(base_dockerfile),
-                "-t",
-                "mmc-base-lambda:latest",
-                str(self.repo_root),  # Build from repo root for workspace context
-            ],
-            cwd=self.repo_root,
-        )
-        self.log_success("Built mmc-base-lambda:latest")
-
-        # Build analyser images
-        for analyser in ["mq", "dq", "bias", "explain", "shadow"]:
-            analyser_dockerfile = self.repo_root / "containers" / analyser / "Dockerfile.lambda"
-
-            if not analyser_dockerfile.exists():
-                self.log_verbose(f"Skipping {analyser} (Dockerfile.lambda not found)")
-                continue
-
-            self.log(f"Building mmc-{analyser}-lambda image...")
-            self.run_cmd(
-                [
-                    "docker",
-                    "build",
-                    "-f",
-                    str(analyser_dockerfile),
-                    "-t",
-                    f"mmc-{analyser}-lambda:latest",
-                    "--build-arg",
-                    "BASE_IMAGE=mmc-base-lambda:latest",
-                    str(self.repo_root),  # Build from repo root for workspace context
-                ],
-                cwd=self.repo_root,
-            )
-            self.log_success(f"Built mmc-{analyser}-lambda:latest")
 
 
     def set_env_vars(self):
@@ -224,72 +177,25 @@ class LocalStackTestRunner:
         os.environ["AWS_SECRET_ACCESS_KEY"] = "test"
         os.environ["AWS_DEFAULT_REGION"] = self.region
 
-    def get_cdk_env(self) -> dict[str, str]:
-        """Get environment for CDK commands."""
-        return {
-            "AWS_ENDPOINT_URL_S3": "http://localhost:4566",
-            "AWS_ENDPOINT_URL_DYNAMODB": "http://localhost:4566",
-            "AWS_ENDPOINT_URL_STEPFUNCTIONS": "http://localhost:4566",
-            "AWS_ENDPOINT_URL_LAMBDA": "http://localhost:4566",
-            "AWS_ENDPOINT_URL_IAM": "http://localhost:4566",
-            "AWS_ENDPOINT_URL_LOGS": "http://localhost:4566",
-            "AWS_ENDPOINT_URL_STS": "http://localhost:4566",
-            "AWS_ENDPOINT_URL_CLOUDWATCH": "http://localhost:4566",
-            "AWS_ENDPOINT_URL_ECR": "http://localhost:4566",
-            "AWS_ENDPOINT_URL_KMS": "http://localhost:4566",
-            # Configure CDK to use LocalStack S3 for assets
-            "CDK_DEFAULT_REGION": self.region,
-            "CDK_DEFAULT_ACCOUNT": "000000000000",
-        }
-
-    def bootstrap_cdk(self):
-        """Run CDK bootstrap."""
-        self.log("Running CDK bootstrap...")
-        self.run_cmd(
-            ["cdklocal", "bootstrap", "aws://000000000000/eu-west-1"],
-            env=self.get_cdk_env(),
-        )
-        self.log_success("CDK bootstrap complete")
-
-    def deploy_cdk(self) -> str:
-        """Deploy CDK infrastructure, return baseline SFN ARN."""
-        self.log("Deploying CDK infrastructure (OperationsBaselineStack + InferenceMonitorStack)...")
-
-        result = self.run_cmd(
-            ["cdklocal", "deploy", "--require-approval", "never", "--all"],
-            env=self.get_cdk_env(),
-        )
-
-        # Extract baseline state machine ARN
-        sfn_arn = None
-        for line in result.stdout.split("\n"):
-            if "BaselineStateMachineArn" in line:
-                sfn_arn = line.split("=")[-1].strip()
-                break
-
-        if not sfn_arn:
-            raise RuntimeError("Could not find BaselineStateMachineArn in deploy output")
-
-        self.log_success(f"CDK deploy complete, baseline SFN ARN: {sfn_arn}")
-        return sfn_arn
 
     def run_pytest_e2e_tests(self) -> bool:
         """Run pytest E2E tests with LOCALSTACK_TEST_ENABLED."""
-        self.log("Running pytest E2E tests...")
+        self.log("Running pytest E2E tests (manual infrastructure)...")
 
         env = os.environ.copy()
         env["LOCALSTACK_TEST_ENABLED"] = "1"
+        env["PYTHONPATH"] = str(self.repo_root / "tests" / "e2e")
 
         result = subprocess.run(
             [
                 "uv",
                 "run",
                 "pytest",
-                "tests/e2e/test_localstack_baseline.py",
-                "tests/e2e/test_localstack_inference_monitor.py",
+                "tests/e2e/test_localstack_simple.py",
                 "-v",
                 "-m",
                 "e2e",
+                "--tb=short",
             ],
             cwd=self.repo_root,
             env=env,
@@ -303,11 +209,9 @@ class LocalStackTestRunner:
         try:
             # Setup phase
             self.start_localstack()
-            # NOTE: Docker image building skipped - now using zip-based Lambda functions
-            # This eliminates CDK asset publishing issues while still testing the same logic
             self.set_env_vars()
 
-            # Test phase (pytest will handle AWS resource setup, CDK bootstrap/deploy)
+            # Test phase (pytest will create resources via manual_infra.py)
             tests_passed = self.run_pytest_e2e_tests()
 
             # Report
