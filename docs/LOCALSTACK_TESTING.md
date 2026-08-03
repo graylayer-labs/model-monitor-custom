@@ -175,7 +175,7 @@ resources = create_localstack_infrastructure()
 
 ### `tests/e2e/test_localstack_simple.py`
 
-Three E2E tests:
+Four E2E tests:
 
 1. **test_baseline_registry_operations()** — Validates DynamoDB table structure and CRUD operations
    - Creates a baseline registry entry
@@ -192,6 +192,12 @@ Three E2E tests:
    - Creates baseline registry entry with approval status
    - Verifies all 5 analysers (mq, dq, bias, explain, shadow) are approved
    - Validates end-to-end data consistency
+
+4. **test_lambda_invocation()** — Validates Lambda function creation and invocation
+   - Creates IAM role for Lambda execution
+   - Creates a zip-based Lambda function
+   - Invokes Lambda synchronously with test payload
+   - Verifies response structure and payload echo
 
 ## Troubleshooting
 
@@ -254,10 +260,11 @@ python -m pytest tests/e2e/test_localstack_simple.py
 
 After running tests, verify:
 
-- [ ] All 3 tests passed (exit code 0)
+- [ ] All 4 tests passed (exit code 0)
 - [ ] Baseline registry table created with test data
 - [ ] S3 artifacts readable
 - [ ] All 5 analysers have approval status in registry
+- [ ] Lambda function created and invoked successfully
 - [ ] No errors in pytest output
 
 ## Performance Notes
@@ -276,13 +283,13 @@ Much faster than CDK-based approach (which was 90-165s).
 
 ## Future Enhancements
 
-Future test additions (not blocking current work):
-- Lambda invocation tests (once Dockerfile.lambda variants created)
-- Step Functions execution tests (baseline and monitor state machines)
+Potential extensions (not blocking current work):
+- Step Functions execution tests (baseline and monitor state machines with orchestrated Lambda invocations)
 - CloudWatch metric validation
-- End-to-end analyser pipeline integration
+- End-to-end analyser pipeline integration with actual analyser business logic
+- Performance benchmarking and load testing
 
-For now, these manual infrastructure tests provide a solid foundation for validating the data model and AWS resource structure.
+Current tests validate the data model, AWS resource structure, and compute invocation path.
 
 ## See Also
 
