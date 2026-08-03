@@ -110,34 +110,43 @@ def localstack_resources(localstack_up, build_analyser_images):
     key_resp = kms.create_key(Description="MMC test key")
     key_arn = key_resp["KeyMetadata"]["Arn"]
 
-    # Create baselines bucket
-    s3.create_bucket(
-        Bucket="mmc-test-baselines",
-        CreateBucketConfiguration={"LocationConstraint": "eu-west-1"},
-    )
+    # Create baselines bucket (idempotent - skip if exists)
+    try:
+        s3.create_bucket(
+            Bucket="mmc-test-baselines",
+            CreateBucketConfiguration={"LocationConstraint": "eu-west-1"},
+        )
+    except s3.exceptions.BucketAlreadyOwnedByYou:
+        pass
 
     # Create producer bucket (for baseline input)
-    s3.create_bucket(
-        Bucket="mmc-test-producer",
-        CreateBucketConfiguration={"LocationConstraint": "eu-west-1"},
-    )
+    try:
+        s3.create_bucket(
+            Bucket="mmc-test-producer",
+            CreateBucketConfiguration={"LocationConstraint": "eu-west-1"},
+        )
+    except s3.exceptions.BucketAlreadyOwnedByYou:
+        pass
 
-    # Create baseline registry table (DynamoDB)
+    # Create baseline registry table (DynamoDB) - idempotent
     registry_table_name = "mmc-test-baseline-registry"
-    ddb.create_table(
-        TableName=registry_table_name,
-        KeySchema=[
-            {"AttributeName": "project", "KeyType": "HASH"},
-            {"AttributeName": "sk", "KeyType": "RANGE"},
-        ],
-        AttributeDefinitions=[
-            {"AttributeName": "project", "AttributeType": "S"},
-            {"AttributeName": "sk", "AttributeType": "S"},
-        ],
-        BillingMode="PAY_PER_REQUEST",
-    )
+    try:
+        ddb.create_table(
+            TableName=registry_table_name,
+            KeySchema=[
+                {"AttributeName": "project", "KeyType": "HASH"},
+                {"AttributeName": "sk", "KeyType": "RANGE"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "project", "AttributeType": "S"},
+                {"AttributeName": "sk", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+    except ddb.exceptions.ResourceInUseException:
+        pass
 
-    # Create baseline writer IAM role for cross-account writes
+    # Create baseline writer IAM role for cross-account writes - idempotent
     trust_policy = {
         "Version": "2012-10-17",
         "Statement": [
@@ -149,12 +158,16 @@ def localstack_resources(localstack_up, build_analyser_images):
         ],
     }
     role_name = "mmc-test-baseline-writer"
-    role_resp = iam.create_role(
-        RoleName=role_name,
-        AssumeRolePolicyDocument=json.dumps(trust_policy),
-        Description="MMC test baseline writer role",
-    )
-    baseline_writer_role_arn = role_resp["Role"]["Arn"]
+    try:
+        role_resp = iam.create_role(
+            RoleName=role_name,
+            AssumeRolePolicyDocument=json.dumps(trust_policy),
+            Description="MMC test baseline writer role",
+        )
+        baseline_writer_role_arn = role_resp["Role"]["Arn"]
+    except iam.exceptions.EntityAlreadyExistsException:
+        role_resp = iam.get_role(RoleName=role_name)
+        baseline_writer_role_arn = role_resp["Role"]["Arn"]
 
     # Export ARNs and names for the CDK app
     os.environ["MMC_TEST_KMS_KEY_ARN"] = key_arn

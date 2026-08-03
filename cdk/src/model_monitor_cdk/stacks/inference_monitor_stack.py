@@ -59,7 +59,6 @@ from aws_cdk import (
 )
 from constructs import Construct
 
-from aws_cdk import BundlingOptions
 from model_monitor_cdk.config import ComputeBackend
 
 _ECR_PATTERN = re.compile(r"^\d{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/[^\s:]+:[^\s]+$")
@@ -394,26 +393,12 @@ class InferenceMonitorStack(Stack):
                 ),
             )
 
-            # Create zip-based Lambda function with dependencies bundled via pip
-            bundling = BundlingOptions(
-                image=lambda_.Runtime.PYTHON_3_12.bundling_image,
-                command=[
-                    "bash",
-                    "-c",
-                    # Install Python dependencies into site-packages in the output
-                    "cd /asset-input && "
-                    "pip install --target /asset-output -r requirements-lambda.txt && "
-                    "cp model_monitor_cdk/analyser_handler.py /asset-output/",
-                ],
-            )
-
+            # Create zip-based Lambda function
+            # Code is packaged directly; dependencies must be available in Lambda environment
             fn = lambda_.Function(
                 self,
                 f"Analyser{analyser.title()}",
-                code=lambda_.Code.from_asset(
-                    str(cdk_src_dir),
-                    bundling=bundling,
-                ),
+                code=lambda_.Code.from_asset(str(cdk_src_dir)),
                 handler="analyser_handler.handler",
                 runtime=lambda_.Runtime.PYTHON_3_12,
                 role=exec_role,  # ty: ignore[invalid-argument-type]
