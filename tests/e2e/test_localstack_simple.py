@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import json
 import os
+import time
+import zipfile
+from pathlib import Path
 import boto3
 import pytest
 from manual_infra import create_localstack_infrastructure
@@ -211,3 +214,111 @@ def test_baseline_workflow():
         )
         data = json.loads(result["Body"].read())
         assert data is not None
+
+
+@pytest.mark.e2e
+def test_lambda_invocation():
+    """Test Lambda function invocation in LocalStack."""
+    resources = create_localstack_infrastructure()
+
+    os.environ["AWS_ACCESS_KEY_ID"] = "test"
+    os.environ["AWS_SECRET_ACCESS_KEY"] = "test"
+    os.environ["AWS_DEFAULT_REGION"] = "eu-west-1"
+
+    # Set up clients
+    lambda_client = boto3.client(
+        "lambda",
+        endpoint_url="http://localhost:4566",
+        region_name="eu-west-1"
+    )
+    iam = boto3.client("iam", endpoint_url="http://localhost:4566", region_name="eu-west-1")
+
+    # 1. Create IAM role for Lambda (idempotent)
+    trust_policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {"Service": "lambda.amazonaws.com"},
+                "Action": "sts:AssumeRole",
+            }
+        ],
+    }
+    try:
+        role_resp = iam.create_role(
+            RoleName="mmc-test-lambda-role",
+            AssumeRolePolicyDocument=json.dumps(trust_policy),
+        )
+    except iam.exceptions.EntityAlreadyExistsException:
+        role_resp = iam.get_role(RoleName="mmc-test-lambda-role")
+
+    role_arn = role_resp["Role"]["Arn"]
+
+    # 2. Create a simple Lambda function zip
+    # We'll use a minimal handler that's inline in the test
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+
+        # Write handler code
+        handler_code = tmpdir / "lambda_function.py"
+        handler_code.write_text("""
+def handler(event, context):
+    return {
+        "statusCode": 200,
+        "analyser": event.get("analyser_type", "unknown"),
+        "run_id": event.get("run_id", "test"),
+        "outcome": "success"
+    }
+""")
+
+        # Create zip file
+        zip_file = tmpdir / "lambda.zip"
+        with zipfile.ZipFile(zip_file, "w") as zf:
+            zf.write(handler_code, "lambda_function.py")
+
+        # 3. Create Lambda function (idempotent)
+        with open(zip_file, "rb") as f:
+            zip_content = f.read()
+
+        try:
+            fn_resp = lambda_client.create_function(
+                FunctionName="mmc-test-analyser",
+                Runtime="python3.11",  # LocalStack supports up to 3.11
+                Role=role_arn,
+                Handler="lambda_function.handler",
+                Code={"ZipFile": zip_content},
+            )
+        except lambda_client.exceptions.ResourceConflictException:
+            fn_resp = lambda_client.get_function(FunctionName="mmc-test-analyser")
+
+        function_arn = fn_resp["FunctionArn"] if "FunctionArn" in fn_resp else fn_resp["Configuration"]["FunctionArn"]
+
+    # 4. Wait for function to be active (LocalStack async initialization)
+    max_attempts = 10
+    for attempt in range(max_attempts):
+        try:
+            fn_info = lambda_client.get_function(FunctionName=function_arn)
+            if fn_info["Configuration"]["State"] == "Active":
+                break
+        except Exception:
+            pass
+        time.sleep(0.5)
+
+    # 5. Invoke the Lambda function
+    invoke_resp = lambda_client.invoke(
+        FunctionName=function_arn,
+        InvocationType="RequestResponse",
+        Payload=json.dumps({
+            "analyser_type": "mq",
+            "run_id": "test-run-123"
+        }),
+    )
+
+    # 6. Verify response
+    assert invoke_resp["StatusCode"] == 200
+    payload = json.loads(invoke_resp["Payload"].read())
+    assert payload["statusCode"] == 200
+    assert payload["analyser"] == "mq"
+    assert payload["run_id"] == "test-run-123"
+    assert payload["outcome"] == "success"
