@@ -1,27 +1,7 @@
-# Example projects.yaml — copy to projects.yaml and edit.
-#
-# One entry per monitored model. Each project mints one InferenceMonitorStack
-# in the account named by `inference_account`.
-
 projects:
-  - name: example-classifier
-    # Must match one of the IDs under accounts.roles.inference.
-    inference_account: "111111111111"
-    # Your training data bucket ARN, owned by the producer team. Object-created
-    # events in this bucket trigger the OperationsBaselineStack Step Function.
-    # Required — no default; the account that produces training data owns it.
-    producer_bucket_arn: "arn:aws:s3:::your-training-snapshots-bucket"
-    # Optional. 12-digit ID of the account that owns the producer bucket.
-    # Omit or null → producer lives in the operations account (single-account
-    # collapse). When set and different from operations, a ProducerEventsStack
-    # is provisioned in the producer account to forward S3 events cross-account
-    # per ADR 010.
-    producer_account: null
-    # EventBridge Scheduler cron for the inference tick (default: hourly).
-    schedule: "cron(0 * * * ? *)"
-    # Optional. VPC ID for InferenceMonitorStack to adopt. Omit or null →
-    # stack creates its own /16 VPC.
-    vpc_id: null
-    # Compute backend: "lambda" (default, fully testable in LocalStack) or "ecs"
-    # (legacy Fargate path, kept for real-AWS parity testing).
+  - name: mmc-aws-test
+    inference_account: "YOUR_ACCOUNT_ID"
+    producer_bucket_arn: "arn:aws:s3:::mmc-aws-test-producer"
     compute_backend: lambda
+    vpc_id: null
+    schedule: "cron(0 * * * ? *)"
