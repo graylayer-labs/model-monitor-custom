@@ -14,7 +14,7 @@ from pathlib import Path
 import boto3
 import pytest
 
-from tests.aws.fixtures.generate_test_data import generate_predictions_data, generate_training_data
+from .fixtures.generate_test_data import generate_predictions_data, generate_training_data
 
 
 @pytest.mark.aws
