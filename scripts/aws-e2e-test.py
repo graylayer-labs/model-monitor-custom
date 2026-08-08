@@ -3,14 +3,11 @@
 
 Handles: deploy → test → cleanup lifecycle for AWS E2E tests.
 
+Credentials are managed by boto3's standard credential chain (~/.aws/credentials, IAM roles, etc).
+No credential handling in this script.
+
 Usage:
     python3 scripts/aws-e2e-test.py --cleanup --verbose
-
-Environment variables:
-    AWS_REGION: AWS region (default: eu-west-1)
-    AWS_ACCOUNT_ID: AWS account ID (required)
-    AWS_ACCESS_KEY_ID: AWS credentials (required)
-    AWS_SECRET_ACCESS_KEY: AWS credentials (required)
 """
 
 from __future__ import annotations
