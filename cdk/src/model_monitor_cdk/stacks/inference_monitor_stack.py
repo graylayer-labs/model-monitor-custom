@@ -263,6 +263,7 @@ class InferenceMonitorStack(Stack):
                 enforce_ssl=True,
                 versioned=True,
                 removal_policy=removal_policy,
+                auto_delete_objects=removal_policy == RemovalPolicy.DESTROY,
             )
 
         outcomes_table = dynamodb.Table(
@@ -287,6 +288,7 @@ class InferenceMonitorStack(Stack):
             enforce_ssl=True,
             versioned=True,
             removal_policy=removal_policy,
+            auto_delete_objects=removal_policy == RemovalPolicy.DESTROY,
         )
 
         log_groups = self._build_log_groups(env)
