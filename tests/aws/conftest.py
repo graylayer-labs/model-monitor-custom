@@ -100,7 +100,7 @@ def aws_stack_names(aws_config):
 def aws_resource_names(aws_config):
     """Expected AWS resource names (created by CDK stack)."""
     # Use environment tag (not project) for resource naming to match CDK stack
-    env = "test"  # matches InferenceMonitorStack _ENV_TAG
+    env = "e2e"  # matches InferenceMonitorStack _ENV_TAG
     return {
         "baselines_bucket": f"mmc-{env}-baselines",
         "outcomes_table": f"mmc-{env}-outcomes",

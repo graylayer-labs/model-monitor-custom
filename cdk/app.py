@@ -19,7 +19,7 @@ from model_monitor_cdk.stacks.inference_monitor_stack import (
     InferenceMonitorStackProps,
 )
 
-_ENV_TAG = "test"
+_ENV_TAG = "e2e"
 _PROJECT_NAME = "mmc-aws-test"
 _ANALYSER_NAMES = ("mq", "dq", "bias", "explain", "shadow")
 

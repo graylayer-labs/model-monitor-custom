@@ -70,7 +70,7 @@ class TestMonitorWorkflow:
 
         Verifies all 5 analyser Lambdas are deployed and configured.
         """
-        env = "test"  # Matches stack env tag
+        env = "e2e"  # Matches stack env tag
         expected_analysers = {"mq", "dq", "bias", "explain", "shadow"}
 
         print("\n[1/2] Listing Lambda functions...")
