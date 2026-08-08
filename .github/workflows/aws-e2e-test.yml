@@ -18,6 +18,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write  # Required for OIDC
 
 jobs:
   aws-e2e-test:
@@ -27,6 +28,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ inputs.region || 'eu-west-1' }}
+
+      - name: Get AWS Account ID
+        run: echo "AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)" >> $GITHUB_ENV
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -45,9 +55,7 @@ jobs:
       - name: Run AWS E2E test
         env:
           AWS_REGION: ${{ inputs.region || 'eu-west-1' }}
-          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_ACCOUNT_ID: ${{ env.AWS_ACCOUNT_ID }}
         run: |
           python3 scripts/aws-e2e-test.py \
             --region "$AWS_REGION" \
@@ -60,14 +68,12 @@ jobs:
           echo "AWS E2E test execution complete"
           echo "Region: ${{ inputs.region || 'eu-west-1' }}"
           echo "Cleanup: ${{ !inputs.no_cleanup }}"
+          echo "AWS Account: ${{ env.AWS_ACCOUNT_ID }}"
 
       - name: Cleanup on failure
         if: failure() && !inputs.no_cleanup
         env:
           AWS_REGION: ${{ inputs.region || 'eu-west-1' }}
-          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           cd cdk
           uv run cdk destroy '*' --force 2>/dev/null || true

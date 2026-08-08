@@ -1,0 +1,108 @@
+# CloudFormation template for GitHub OIDC + E2E test role
+# Deploy via: aws cloudformation deploy --template-file github-oidc-setup.yaml --stack-name mmc-github-oidc --capabilities CAPABILITY_NAMED_IAM
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "GitHub OIDC role for model-monitor-custom E2E testing"
+
+Parameters:
+  GitHubRepo:
+    Type: String
+    Description: "GitHub repository (e.g., graylayer-labs/model-monitor-custom)"
+  GitHubBranch:
+    Type: String
+    Default: "main"
+    Description: "GitHub branch to trust (e.g., main)"
+
+Resources:
+  GitHubOIDCRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: mmc-github-e2e-test-role
+      Description: "Role for GitHub Actions to run AWS E2E tests"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub "arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+            Action: "sts:AssumeRoleWithWebIdentity"
+            Condition:
+              StringLike:
+                "token.actions.githubusercontent.com:sub": !Sub "repo:${GitHubRepo}:ref:refs/heads/${GitHubBranch}"
+              StringEquals:
+                "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+
+  GitHubOIDCPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: mmc-github-e2e-test-policy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          # CloudFormation permissions
+          - Effect: Allow
+            Action:
+              - "cloudformation:*"
+            Resource: "*"
+          # S3 permissions
+          - Effect: Allow
+            Action:
+              - "s3:*"
+            Resource: "*"
+          # Lambda permissions
+          - Effect: Allow
+            Action:
+              - "lambda:*"
+            Resource: "*"
+          # DynamoDB permissions
+          - Effect: Allow
+            Action:
+              - "dynamodb:*"
+            Resource: "*"
+          # IAM permissions
+          - Effect: Allow
+            Action:
+              - "iam:*"
+            Resource: "*"
+          # CloudWatch permissions
+          - Effect: Allow
+            Action:
+              - "cloudwatch:*"
+              - "logs:*"
+            Resource: "*"
+          # Events (EventBridge) permissions
+          - Effect: Allow
+            Action:
+              - "events:*"
+            Resource: "*"
+          # Step Functions permissions
+          - Effect: Allow
+            Action:
+              - "stepfunctions:*"
+            Resource: "*"
+          # EC2/VPC permissions (for CDK)
+          - Effect: Allow
+            Action:
+              - "ec2:*"
+            Resource: "*"
+          # KMS permissions
+          - Effect: Allow
+            Action:
+              - "kms:*"
+            Resource: "*"
+          # STS permissions
+          - Effect: Allow
+            Action:
+              - "sts:AssumeRole"
+              - "sts:GetCallerIdentity"
+            Resource: "*"
+      Roles:
+        - !Ref GitHubOIDCRole
+
+Outputs:
+  RoleArn:
+    Description: "GitHub OIDC Role ARN (use in workflow)"
+    Value: !GetAtt GitHubOIDCRole.Arn
+  AccountId:
+    Description: "AWS Account ID"
+    Value: !Ref "AWS::AccountId"
