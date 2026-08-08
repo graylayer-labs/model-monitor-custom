@@ -9,6 +9,7 @@ from uuid import UUID
 
 import boto3
 import pytest
+from loguru import logger
 
 
 def _create_state_machine(sfn_client, role_arn: str) -> str:
@@ -165,7 +166,7 @@ def test_full_inference_monitor_fan_out(localstack_resources):
         status = exec_status["status"]
 
         if status == "SUCCEEDED":
-            print(f"  ✓ SFN execution succeeded after {time.time() - start_time:.1f}s")
+            logger.info(f"SFN execution succeeded after {time.time() - start_time:.1f}s")
             break
         elif status == "FAILED":
             raise AssertionError(f"SFN execution failed: {exec_status.get('cause', 'unknown')}")
@@ -191,4 +192,4 @@ def test_full_inference_monitor_fan_out(localstack_resources):
     tables = ddb.list_tables()
     assert outcomes_table in tables["TableNames"], f"Table {outcomes_table} not found"
 
-    print(f"✓ LocalStack E2E test passed: state machine={sfn_arn}, bucket={baselines_bucket}, table={outcomes_table}")
+    logger.info(f"LocalStack E2E test passed: state_machine={sfn_arn}, bucket={baselines_bucket}, table={outcomes_table}")
