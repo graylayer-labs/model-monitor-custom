@@ -231,12 +231,6 @@ def main():
 
     args = parser.parse_args()
 
-    # Verify required env vars
-    for var in ["AWS_ACCOUNT_ID", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]:
-        if not os.environ.get(var):
-            print(f"Error: {var} environment variable required")
-            sys.exit(1)
-
     # Run orchestrator
     orchestrator = AWSTestOrchestrator(
         region=args.region,
