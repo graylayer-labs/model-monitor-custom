@@ -113,10 +113,10 @@ class InferenceMonitorStackProps:
 
     environment: Literal["test", "prod", "dev"]
     project_name: str
-    consumer_account_id: str
-    artifact_account_id: str
-    artifact_kms_key_arn: str
-    baselines_bucket_arn: str
+    consumer_account_id: str = ""
+    artifact_account_id: str = ""
+    artifact_kms_key_arn: str = ""
+    baselines_bucket_arn: str = ""
     analyser_image_uris: dict[str, str] = field(default_factory=dict)
     vpc_id: str | None = None
     schedule_expression: str = "cron(0 * * * ? *)"
@@ -147,24 +147,19 @@ class InferenceMonitorStackProps:
         if not self.project_name:
             msg = "project_name must be a non-empty string"
             raise ValueError(msg)
-        if not _ACCOUNT_ID_PATTERN.match(self.consumer_account_id):
+        # Account IDs and ARNs are optional for single-account deployments
+        if self.consumer_account_id and not _ACCOUNT_ID_PATTERN.match(self.consumer_account_id):
             msg = f"consumer_account_id must be 12 digits, got: {self.consumer_account_id!r}"
             raise ValueError(msg)
-        if not _ACCOUNT_ID_PATTERN.match(self.artifact_account_id):
+        if self.artifact_account_id and not _ACCOUNT_ID_PATTERN.match(self.artifact_account_id):
             msg = f"artifact_account_id must be 12 digits, got: {self.artifact_account_id!r}"
-            raise ValueError(msg)
-        if not self.artifact_kms_key_arn:
-            msg = "artifact_kms_key_arn must be non-empty"
-            raise ValueError(msg)
-        if not self.baselines_bucket_arn:
-            msg = "baselines_bucket_arn must be non-empty"
             raise ValueError(msg)
 
     def _validate_images(self) -> None:
-        """Check that every analyser has a well-formed ECR URI.
+        """Check that every analyser has a well-formed image reference.
 
         Raises:
-            ValueError: If keys are missing/extra or a URI isn't an ECR URI.
+            ValueError: If keys are missing/extra or image is malformed.
         """
         # Skip validation if using a custom image source hook (e.g., for LocalStack tests)
         if self.analyser_image_source is not None:
@@ -178,8 +173,9 @@ class InferenceMonitorStackProps:
             if key not in self._REQUIRED_ANALYSERS:
                 msg = f"analyser_image_uris has unexpected key {key!r}"
                 raise ValueError(msg)
-            if not _ECR_PATTERN.match(uri):
-                msg = f"analyser_image_uris[{key!r}] must be an ECR URI, got: {uri!r}"
+            # Allow ECR URIs or local Docker image names (e.g., "mmc-mq-lambda:latest")
+            if not (_ECR_PATTERN.match(uri) or ":" in uri):
+                msg = f"analyser_image_uris[{key!r}] must be an ECR URI or image name, got: {uri!r}"
                 raise ValueError(msg)
 
     def _validate_numeric(self) -> None:
