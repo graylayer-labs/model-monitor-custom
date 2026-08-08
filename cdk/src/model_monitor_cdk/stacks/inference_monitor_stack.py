@@ -232,12 +232,35 @@ class InferenceMonitorStack(Stack):
 
         env = props.environment
 
-        kms_key = kms.Key.from_key_arn(self, "ArtifactKmsKey", key_arn=props.artifact_kms_key_arn)
-        baselines_bucket = s3.Bucket.from_bucket_arn(
-            self,
-            "BaselinesBucket",
-            bucket_arn=props.baselines_bucket_arn,
-        )
+        # For single-account deployments, create resources locally; otherwise reference them
+        if props.artifact_kms_key_arn:
+            kms_key = kms.Key.from_key_arn(self, "ArtifactKmsKey", key_arn=props.artifact_kms_key_arn)
+        else:
+            kms_key = kms.Key(
+                self,
+                "ArtifactKmsKey",
+                enable_key_rotation=True,
+                removal_policy=RemovalPolicy.RETAIN,
+            )
+
+        if props.baselines_bucket_arn:
+            baselines_bucket = s3.Bucket.from_bucket_arn(
+                self,
+                "BaselinesBucket",
+                bucket_arn=props.baselines_bucket_arn,
+            )
+        else:
+            baselines_bucket = s3.Bucket(
+                self,
+                "BaselinesBucket",
+                bucket_name=f"mmc-{env}-baselines",
+                encryption=s3.BucketEncryption.KMS,
+                encryption_key=kms_key,
+                block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+                enforce_ssl=True,
+                versioned=True,
+                removal_policy=RemovalPolicy.RETAIN,
+            )
 
         outcomes_table = dynamodb.Table(
             self,
