@@ -233,8 +233,8 @@ class InferenceMonitorStack(Stack):
         env = props.environment
 
         # For single-account deployments, create resources locally; otherwise reference them
-        # Use DESTROY for test environments, RETAIN for prod
-        removal_policy = RemovalPolicy.DESTROY if env == "test" else RemovalPolicy.RETAIN
+        # Use RETAIN to avoid S3 deletion issues (user can clean up manually or via AWS console)
+        removal_policy = RemovalPolicy.RETAIN
 
         if props.artifact_kms_key_arn:
             kms_key = kms.Key.from_key_arn(self, "ArtifactKmsKey", key_arn=props.artifact_kms_key_arn)
