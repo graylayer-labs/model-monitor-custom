@@ -233,6 +233,9 @@ class InferenceMonitorStack(Stack):
         env = props.environment
 
         # For single-account deployments, create resources locally; otherwise reference them
+        # Use DESTROY for test environments, RETAIN for prod
+        removal_policy = RemovalPolicy.DESTROY if env == "test" else RemovalPolicy.RETAIN
+
         if props.artifact_kms_key_arn:
             kms_key = kms.Key.from_key_arn(self, "ArtifactKmsKey", key_arn=props.artifact_kms_key_arn)
         else:
@@ -240,7 +243,7 @@ class InferenceMonitorStack(Stack):
                 self,
                 "ArtifactKmsKey",
                 enable_key_rotation=True,
-                removal_policy=RemovalPolicy.RETAIN,
+                removal_policy=removal_policy,
             )
 
         if props.baselines_bucket_arn:
@@ -259,7 +262,7 @@ class InferenceMonitorStack(Stack):
                 block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
                 enforce_ssl=True,
                 versioned=True,
-                removal_policy=RemovalPolicy.RETAIN,
+                removal_policy=removal_policy,
             )
 
         outcomes_table = dynamodb.Table(
@@ -272,7 +275,7 @@ class InferenceMonitorStack(Stack):
             stream=dynamodb.StreamViewType.NEW_IMAGE,
             encryption=dynamodb.TableEncryption.CUSTOMER_MANAGED,
             encryption_key=kms_key,
-            removal_policy=RemovalPolicy.RETAIN,
+            removal_policy=removal_policy,
         )
 
         archive_bucket = s3.Bucket(
@@ -283,7 +286,7 @@ class InferenceMonitorStack(Stack):
             block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
             enforce_ssl=True,
             versioned=True,
-            removal_policy=RemovalPolicy.RETAIN,
+            removal_policy=removal_policy,
         )
 
         log_groups = self._build_log_groups(env)
