@@ -423,8 +423,8 @@ class InferenceMonitorStack(Stack):
                     # Local Docker image name (e.g., "mmc-mq-lambda:latest")
                     repo_root = Path(__file__).resolve().parent.parent.parent.parent.parent
                     code = lambda_.DockerImageCode.from_image_asset(
-                        directory=str(repo_root / f"containers/{analyser}"),
-                        file="Dockerfile.lambda",
+                        directory=str(repo_root),
+                        file=f"containers/{analyser}/Dockerfile.lambda",
                     )
                 else:
                     # ECR image URI
