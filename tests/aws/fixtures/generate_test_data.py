@@ -81,13 +81,15 @@ def save_test_data(output_dir: Path | str) -> dict[str, str]:
 if __name__ == "__main__":
     import tempfile
 
+    from loguru import logger
+
     with tempfile.TemporaryDirectory() as tmpdir:
         paths = save_test_data(tmpdir)
-        print(f"Training data: {paths['training']}")
-        print(f"Predictions data: {paths['predictions']}")
+        logger.info(f"Training data: {paths['training']}")
+        logger.info(f"Predictions data: {paths['predictions']}")
 
         # Verify
         df_train = pd.read_parquet(paths["training"])
         df_pred = pd.read_parquet(paths["predictions"])
-        print(f"\nTraining shape: {df_train.shape}")
-        print(f"Predictions shape: {df_pred.shape}")
+        logger.info(f"Training shape: {df_train.shape}")
+        logger.info(f"Predictions shape: {df_pred.shape}")
