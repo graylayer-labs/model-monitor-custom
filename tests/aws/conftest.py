@@ -98,15 +98,12 @@ def aws_stack_names(aws_config):
 
 @pytest.fixture(scope="session")
 def aws_resource_names(aws_config):
-    """Expected AWS resource names."""
-    project = aws_config["project"]
+    """Expected AWS resource names (created by CDK stack)."""
+    # Use environment tag (not project) for resource naming to match CDK stack
+    env = "test"  # matches InferenceMonitorStack _ENV_TAG
     return {
-        "baselines_bucket": f"mmc-{project.lower()}-baselines",
-        "producer_bucket": f"mmc-{project.lower()}-producer",
-        "baseline_registry_table": f"mmc-{project.lower()}-baseline-registry",
-        "outcomes_table": f"mmc-{project.lower()}-outcomes",
-        "baseline_sfn_arn": f"arn:aws:states:{{region}}:{{account}}:stateMachine:baseline-{{project}}",
-        "monitor_sfn_arn": f"arn:aws:states:{{region}}:{{account}}:stateMachine:monitor-{{project}}",
+        "baselines_bucket": f"mmc-{env}-baselines",
+        "outcomes_table": f"mmc-{env}-outcomes",
     }
 
 
