@@ -10,7 +10,6 @@ whatever the profile owns.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import aws_cdk as cdk
@@ -40,9 +39,9 @@ _ENV_TAG = "test"
 _ANALYSER_NAMES = ("mq", "dq", "bias", "explain", "shadow")
 
 
-def _is_localstack_mode() -> bool:
-    """Detect if running against LocalStack (checking for LocalStack endpoint env vars)."""
-    return bool(os.environ.get("AWS_ENDPOINT_URL_S3"))
+def _is_localstack_mode(scope: cdk.App) -> bool:
+    """Detect if running against LocalStack (from cdk.json context)."""
+    return scope.node.try_get_context("localstack") is True
 
 
 def _localstack_image_source(analyser: str) -> lambda_.DockerImageCode:
@@ -147,7 +146,7 @@ def build_app(app: cdk.App) -> cdk.App:
     )
 
     # For LocalStack testing, use local Docker images instead of ECR
-    localstack_mode = _is_localstack_mode()
+    localstack_mode = _is_localstack_mode(app)
     image_source = _localstack_image_source if localstack_mode else None
 
     for project in cfg.projects.projects:

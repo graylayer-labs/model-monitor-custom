@@ -12,23 +12,34 @@ import pytest
 
 @pytest.fixture(scope="session")
 def aws_config():
-    """Load AWS configuration from environment.
+    """Load AWS configuration.
 
-    Expected environment variables:
-    - AWS_REGION: AWS region (e.g., eu-west-1)
-    - AWS_ACCOUNT_ID: AWS account ID
-    - AWS_ACCESS_KEY_ID: AWS credentials
-    - AWS_SECRET_ACCESS_KEY: AWS credentials
+    Region defaults to eu-west-1 if AWS_REGION not set.
+    Account ID is obtained from AWS caller identity (no env var needed).
+    Credentials managed by boto3's standard credential chain.
     """
+    import subprocess
+
+    region = os.environ.get("AWS_REGION", "eu-west-1")
+
+    # Get account ID from AWS if not in environment
+    if "AWS_ACCOUNT_ID" in os.environ:
+        account_id = os.environ["AWS_ACCOUNT_ID"]
+    else:
+        result = subprocess.run(
+            ["aws", "sts", "get-caller-identity", "--query", "Account", "--output", "text"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        account_id = result.stdout.strip()
+
     config = {
-        "region": os.environ.get("AWS_REGION", "eu-west-1"),
-        "account_id": os.environ.get("AWS_ACCOUNT_ID"),
+        "region": region,
+        "account_id": account_id,
         "project": "mmc-aws-test",
         "model_version": "e2e-smoke-test-v1",
     }
-
-    if not config["account_id"]:
-        raise ValueError("AWS_ACCOUNT_ID environment variable required")
 
     return config
 
