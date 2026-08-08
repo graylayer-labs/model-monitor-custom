@@ -16,15 +16,16 @@ jobs:
 
     services:
       localstack:
-        image: localstack/localstack:latest
+        image: localstack/localstack:3.4.0
         ports:
           - 4566:4566
         env:
-          SERVICES: s3,dynamodb,lambda,stepfunctions,events,iam,logs,sts,cloudwatch
+          SERVICES: s3,dynamodb,lambda,stepfunctions,iam,logs,sts,cloudwatch,kms
           DEBUG: 0
           DOCKER_HOST: unix:///var/run/docker.sock
+          SKIP_LICENSE_ACTIVATION: 1
         options: >-
-          --health-cmd "awslocal kinesis list-streams"
+          --health-cmd "awslocal s3 ls"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
