@@ -14,16 +14,35 @@ import pytest
 
 @pytest.fixture(scope="session")
 def localstack_up():
-    """Bring up LocalStack, wait for health, and tear down."""
+    """Bring up LocalStack (or use existing service), wait for health, and tear down if started."""
     repo_root = Path(__file__).parent.parent.parent
     compose_file = repo_root / "docker-compose.localstack.yml"
 
-    # Start LocalStack
-    subprocess.run(
-        ["docker", "compose", "-f", str(compose_file), "up", "-d"],
-        check=True,
-        cwd=str(repo_root),
-    )
+    # Check if LocalStack is already running (e.g., as a GitHub Actions service)
+    already_running = False
+    max_health_checks = 5
+    for attempt in range(max_health_checks):
+        try:
+            response = subprocess.run(
+                ["curl", "-f", "http://localhost:4566/_localstack/health"],
+                capture_output=True,
+                timeout=2,
+                check=False,
+            )
+            if response.returncode == 0:
+                already_running = True
+                break
+        except Exception:
+            pass
+        time.sleep(0.5)
+
+    # Only start LocalStack if not already running
+    if not already_running:
+        subprocess.run(
+            ["docker", "compose", "-f", str(compose_file), "up", "-d"],
+            check=True,
+            cwd=str(repo_root),
+        )
 
     # Wait for health
     max_attempts = 60
@@ -49,12 +68,13 @@ def localstack_up():
 
     yield
 
-    # Tear down
-    subprocess.run(
-        ["docker", "compose", "-f", str(compose_file), "down", "-v"],
-        check=True,
-        cwd=str(repo_root),
-    )
+    # Only tear down if we started it
+    if not already_running:
+        subprocess.run(
+            ["docker", "compose", "-f", str(compose_file), "down", "-v"],
+            check=True,
+            cwd=str(repo_root),
+        )
 
 
 @pytest.fixture(scope="session")
