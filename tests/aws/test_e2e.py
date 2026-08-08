@@ -35,12 +35,6 @@ class TestBaselineWorkflow:
         2. Outcomes DynamoDB table exists
         """
         baselines_bucket = aws_resource_names["baselines_bucket"]
-        project = aws_config["project"]
-        model_version = aws_config["model_version"]
-
-        # 1. Upload test data to S3
-        print("\n[1/5] Uploading test data to S3...")
-        baselines_bucket = aws_resource_names["baselines_bucket"]
         outcomes_table = aws_resource_names["outcomes_table"]
 
         print(f"\n[1/2] Checking S3 bucket: {baselines_bucket}")
