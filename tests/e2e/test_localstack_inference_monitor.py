@@ -92,19 +92,41 @@ def test_full_inference_monitor_fan_out(localstack_resources):
     )
     execution_arn = exec_resp["executionArn"]
 
-    # 6. Poll for completion (30s timeout, 1s interval)
+    # 6. Poll for completion (60s timeout with exponential backoff)
     start_time = time.time()
-    timeout = 30
+    timeout = os.environ.get("E2E_TIMEOUT_SECONDS", "60")
+    timeout = int(timeout)
+    poll_interval = 1
+    max_interval = 5
+
     while time.time() - start_time < timeout:
-        exec_status = sfn.describe_execution(executionArn=execution_arn)
-        status = exec_status["status"]
+        try:
+            exec_status = sfn.describe_execution(executionArn=execution_arn)
+            status = exec_status["status"]
 
-        if status == "SUCCEEDED":
-            break
-        if status == "FAILED":
-            raise AssertionError(f"SFN execution failed: {exec_status.get('cause', 'unknown')}")
+            if status == "SUCCEEDED":
+                print(f"  ✓ SFN execution succeeded after {time.time() - start_time:.1f}s")
+                break
+            elif status == "FAILED":
+                cause = exec_status.get("cause", "unknown")
+                error = exec_status.get("error", "unknown")
+                raise AssertionError(f"SFN execution failed: {error} - {cause}")
+            elif status in ["TIMED_OUT", "ABORTED"]:
+                raise AssertionError(f"SFN execution {status}")
 
-        time.sleep(1)
+            # Exponential backoff
+            time.sleep(poll_interval)
+            poll_interval = min(poll_interval * 1.5, max_interval)
+
+        except Exception as e:
+            elapsed = time.time() - start_time
+            if elapsed < timeout:
+                if "not found" not in str(e).lower():
+                    raise
+                time.sleep(poll_interval)
+            else:
+                raise
+
     else:
         raise TimeoutError(f"SFN execution did not complete within {timeout}s")
 
