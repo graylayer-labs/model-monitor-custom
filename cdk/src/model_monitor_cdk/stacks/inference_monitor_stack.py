@@ -421,8 +421,9 @@ class InferenceMonitorStack(Stack):
                 image_uri = props.analyser_image_uris.get(analyser, "")
                 if image_uri.startswith("mmc-"):
                     # Local Docker image name (e.g., "mmc-mq-lambda:latest")
+                    repo_root = Path(__file__).resolve().parent.parent.parent.parent.parent
                     code = lambda_.DockerImageCode.from_image_asset(
-                        directory=str(Path(__file__).parent.parent.parent / f"containers/{analyser}"),
+                        directory=str(repo_root / f"containers/{analyser}"),
                         file="Dockerfile.lambda",
                     )
                 else:
