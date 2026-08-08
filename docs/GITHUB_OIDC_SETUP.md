@@ -148,23 +148,14 @@ aws cloudformation update-stack \
 
 ## Local Testing
 
-If you want to test locally using the same IAM role:
+For local testing, credentials are managed by boto3's standard credential chain (AWS CLI, IAM roles, etc).
+No credential extraction needed — just run the test:
 
 ```bash
-# Assume the role and get credentials
-ROLE_ARN="arn:aws:iam::123456789012:role/mmc-github-e2e-test-role"
-SESSION=$(aws sts assume-role --role-arn $ROLE_ARN --role-session-name test-session)
-
-# Extract credentials
-export AWS_ACCESS_KEY_ID=$(echo $SESSION | jq -r '.Credentials.AccessKeyId')
-export AWS_SECRET_ACCESS_KEY=$(echo $SESSION | jq -r '.Credentials.SecretAccessKey')
-export AWS_SESSION_TOKEN=$(echo $SESSION | jq -r '.Credentials.SessionToken')
-export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-export AWS_REGION=eu-west-1
-
-# Run test
 python3 scripts/aws-e2e-test.py --cleanup --verbose
 ```
+
+Boto3 will automatically use credentials from `~/.aws/credentials`, IAM role, or AWS SSO.
 
 ## Security Notes
 

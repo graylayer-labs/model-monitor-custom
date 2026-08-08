@@ -3,14 +3,11 @@
 
 Handles: deploy → test → cleanup lifecycle for AWS E2E tests.
 
+Credentials are managed by boto3's standard credential chain (~/.aws/credentials, IAM roles, etc).
+No credential handling in this script.
+
 Usage:
     python3 scripts/aws-e2e-test.py --cleanup --verbose
-
-Environment variables:
-    AWS_REGION: AWS region (default: eu-west-1)
-    AWS_ACCOUNT_ID: AWS account ID (required)
-    AWS_ACCESS_KEY_ID: AWS credentials (required)
-    AWS_SECRET_ACCESS_KEY: AWS credentials (required)
 """
 
 from __future__ import annotations
@@ -27,20 +24,16 @@ from pathlib import Path
 class AWSTestOrchestrator:
     """Orchestrates AWS E2E test lifecycle."""
 
-    def __init__(self, region: str = "eu-west-1", verbose: bool = False, cleanup: bool = True):
+    def __init__(self, verbose: bool = False, cleanup: bool = True):
         """Initialize orchestrator.
 
         Args:
-            region: AWS region
             verbose: Print verbose output
             cleanup: Clean up resources after tests
         """
-        self.region = region
         self.verbose = verbose
         self.cleanup = cleanup
         self.repo_root = Path(__file__).parent.parent
-        self.project = "mmc-aws-test"
-        self.stacks_deployed = []
 
     def log(self, msg: str, level: str = "INFO"):
         """Print log message."""
@@ -56,9 +49,7 @@ class AWSTestOrchestrator:
         """Print error message."""
         self.log(msg, "ERROR")
 
-    def run_cmd(
-        self, cmd: list[str], check: bool = True, capture: bool = False
-    ) -> subprocess.CompletedProcess:
+    def run_cmd(self, cmd: list[str], check: bool = True, capture: bool = False) -> subprocess.CompletedProcess:
         """Run shell command.
 
         Args:
@@ -93,15 +84,10 @@ class AWSTestOrchestrator:
         """Deploy CDK stacks to AWS."""
         self.log("Step 1: Deploying CDK stacks...")
 
-        env = os.environ.copy()
-        env["CDK_DEFAULT_REGION"] = self.region
-        env["CDK_DEFAULT_ACCOUNT"] = os.environ["AWS_ACCOUNT_ID"]
-
         # Deploy all stacks for the test project
         result = subprocess.run(
             ["uv", "run", "cdk", "deploy", "*", "--require-approval", "never"],
             cwd=self.repo_root / "cdk",
-            env=env,
             capture_output=True,
             text=True,
             check=False,
@@ -125,10 +111,6 @@ class AWSTestOrchestrator:
         """Run AWS E2E tests."""
         self.log("Step 2: Running AWS E2E tests...")
 
-        env = os.environ.copy()
-        env["AWS_REGION"] = self.region
-        # AWS credentials already in env
-
         result = subprocess.run(
             [
                 "uv",
@@ -141,7 +123,6 @@ class AWSTestOrchestrator:
                 "--tb=short",
             ],
             cwd=self.repo_root,
-            env=env,
             capture_output=False,
             text=True,
             check=False,
@@ -162,15 +143,10 @@ class AWSTestOrchestrator:
 
         self.log("Step 3: Cleaning up CDK stacks...")
 
-        env = os.environ.copy()
-        env["CDK_DEFAULT_REGION"] = self.region
-        env["CDK_DEFAULT_ACCOUNT"] = os.environ["AWS_ACCOUNT_ID"]
-
         # Destroy all stacks
         result = subprocess.run(
             ["uv", "run", "cdk", "destroy", "*", "--force"],
             cwd=self.repo_root / "cdk",
-            env=env,
             capture_output=True,
             text=True,
             check=False,
@@ -198,6 +174,7 @@ class AWSTestOrchestrator:
             self.log_error(f"Test run failed: {e}")
             if self.verbose:
                 import traceback
+
                 traceback.print_exc()
             return False
 
@@ -213,11 +190,6 @@ def main():
         epilog=__doc__,
     )
     parser.add_argument(
-        "--region",
-        default="eu-west-1",
-        help="AWS region (default: eu-west-1)",
-    )
-    parser.add_argument(
         "--no-cleanup",
         action="store_true",
         help="Keep AWS resources after tests (for debugging)",
@@ -231,15 +203,8 @@ def main():
 
     args = parser.parse_args()
 
-    # Verify required env vars
-    for var in ["AWS_ACCOUNT_ID", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]:
-        if not os.environ.get(var):
-            print(f"Error: {var} environment variable required")
-            sys.exit(1)
-
     # Run orchestrator
     orchestrator = AWSTestOrchestrator(
-        region=args.region,
         verbose=args.verbose,
         cleanup=not args.no_cleanup,
     )
@@ -247,8 +212,6 @@ def main():
     print("\n" + "=" * 60)
     print("AWS E2E Test Orchestrator")
     print("=" * 60)
-    print(f"Region: {args.region}")
-    print(f"Account: {os.environ.get('AWS_ACCOUNT_ID')}")
     print(f"Cleanup: {not args.no_cleanup}")
     print("=" * 60 + "\n")
 

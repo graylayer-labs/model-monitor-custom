@@ -49,7 +49,6 @@ class LocalStackTestRunner:
         self.compose_file = repo_root / "docker-compose.localstack.yml"
         self.region = "eu-west-1"
 
-
     def log(self, msg: str, level: str = "INFO"):
         """Print log message."""
         prefix = f"[{level}]" if level != "INFO" else "[•]"
@@ -169,14 +168,11 @@ class LocalStackTestRunner:
         )
         self.log_success("LocalStack stopped")
 
-
-
     def set_env_vars(self):
         """Set environment variables for test execution."""
         os.environ["AWS_ACCESS_KEY_ID"] = "test"
         os.environ["AWS_SECRET_ACCESS_KEY"] = "test"
         os.environ["AWS_DEFAULT_REGION"] = self.region
-
 
     def run_pytest_e2e_tests(self) -> bool:
         """Run pytest E2E tests with LOCALSTACK_TEST_ENABLED."""

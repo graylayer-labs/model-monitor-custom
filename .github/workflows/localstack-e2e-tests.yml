@@ -1,0 +1,55 @@
+name: LocalStack E2E Tests (Required)
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  localstack-e2e-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      localstack:
+        image: localstack/localstack:3.4.0
+        ports:
+          - 4566:4566
+        env:
+          SERVICES: s3,dynamodb,lambda,stepfunctions,iam,logs,sts,cloudwatch,kms
+          DEBUG: 0
+          DOCKER_HOST: unix:///var/run/docker.sock
+          SKIP_LICENSE_ACTIVATION: 1
+        options: >-
+          --health-cmd "awslocal s3 ls"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run LocalStack E2E tests
+        run: |
+          export AWS_ACCESS_KEY_ID=test
+          export AWS_SECRET_ACCESS_KEY=test
+          export AWS_DEFAULT_REGION=eu-west-1
+          uv run pytest tests/e2e/test_localstack_inference_monitor.py -v --tb=short
+        env:
+          E2E_TIMEOUT_SECONDS: "60"

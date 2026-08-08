@@ -1,18 +1,24 @@
-version: '3.8'
+version: "3.9"
 
 services:
   localstack:
-    image: localstack/localstack:2.3.2
-    environment:
-      SERVICES: s3,dynamodb,lambda,stepfunctions,events,iam,logs,sts,cloudwatch,ecr,kms
-      LAMBDA_EXECUTOR: docker
-      DEBUG: 'false'
+    image: localstack/localstack:3.4.0
+    container_name: localstack-e2e
     ports:
-      - '4566:4566'
+      - "4566:4566"
+    environment:
+      SERVICES: s3,dynamodb,lambda,stepfunctions,iam,logs,sts,cloudwatch,kms
+      DEBUG: 0
+      DOCKER_HOST: unix:///var/run/docker.sock
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: eu-west-1
+      SKIP_LICENSE_ACTIVATION: 1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:4566/_localstack/health']
-      interval: 2s
+      test: ["CMD", "awslocal", "s3", "ls"]
+      interval: 10s
       timeout: 5s
-      retries: 30
+      retries: 5
+      start_period: 30s

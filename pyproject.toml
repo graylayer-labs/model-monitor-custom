@@ -19,6 +19,7 @@ dependencies = [
     "mmc-analyser-mq",
     "mmc-analyser-shadow",
     "mmc-example-adult",
+    "loguru>=0.7.3",
 ]
 
 [tool.uv.workspace]

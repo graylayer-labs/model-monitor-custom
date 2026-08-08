@@ -113,10 +113,10 @@ class InferenceMonitorStackProps:
 
     environment: Literal["test", "prod", "dev"]
     project_name: str
-    consumer_account_id: str
-    artifact_account_id: str
-    artifact_kms_key_arn: str
-    baselines_bucket_arn: str
+    consumer_account_id: str = ""
+    artifact_account_id: str = ""
+    artifact_kms_key_arn: str = ""
+    baselines_bucket_arn: str = ""
     analyser_image_uris: dict[str, str] = field(default_factory=dict)
     vpc_id: str | None = None
     schedule_expression: str = "cron(0 * * * ? *)"
@@ -147,24 +147,19 @@ class InferenceMonitorStackProps:
         if not self.project_name:
             msg = "project_name must be a non-empty string"
             raise ValueError(msg)
-        if not _ACCOUNT_ID_PATTERN.match(self.consumer_account_id):
+        # Account IDs and ARNs are optional for single-account deployments
+        if self.consumer_account_id and not _ACCOUNT_ID_PATTERN.match(self.consumer_account_id):
             msg = f"consumer_account_id must be 12 digits, got: {self.consumer_account_id!r}"
             raise ValueError(msg)
-        if not _ACCOUNT_ID_PATTERN.match(self.artifact_account_id):
+        if self.artifact_account_id and not _ACCOUNT_ID_PATTERN.match(self.artifact_account_id):
             msg = f"artifact_account_id must be 12 digits, got: {self.artifact_account_id!r}"
-            raise ValueError(msg)
-        if not self.artifact_kms_key_arn:
-            msg = "artifact_kms_key_arn must be non-empty"
-            raise ValueError(msg)
-        if not self.baselines_bucket_arn:
-            msg = "baselines_bucket_arn must be non-empty"
             raise ValueError(msg)
 
     def _validate_images(self) -> None:
-        """Check that every analyser has a well-formed ECR URI.
+        """Check that every analyser has a well-formed image reference.
 
         Raises:
-            ValueError: If keys are missing/extra or a URI isn't an ECR URI.
+            ValueError: If keys are missing/extra or image is malformed.
         """
         # Skip validation if using a custom image source hook (e.g., for LocalStack tests)
         if self.analyser_image_source is not None:
@@ -178,8 +173,9 @@ class InferenceMonitorStackProps:
             if key not in self._REQUIRED_ANALYSERS:
                 msg = f"analyser_image_uris has unexpected key {key!r}"
                 raise ValueError(msg)
-            if not _ECR_PATTERN.match(uri):
-                msg = f"analyser_image_uris[{key!r}] must be an ECR URI, got: {uri!r}"
+            # Allow ECR URIs or local Docker image names (e.g., "mmc-mq-lambda:latest")
+            if not (_ECR_PATTERN.match(uri) or ":" in uri):
+                msg = f"analyser_image_uris[{key!r}] must be an ECR URI or image name, got: {uri!r}"
                 raise ValueError(msg)
 
     def _validate_numeric(self) -> None:
@@ -236,12 +232,39 @@ class InferenceMonitorStack(Stack):
 
         env = props.environment
 
-        kms_key = kms.Key.from_key_arn(self, "ArtifactKmsKey", key_arn=props.artifact_kms_key_arn)
-        baselines_bucket = s3.Bucket.from_bucket_arn(
-            self,
-            "BaselinesBucket",
-            bucket_arn=props.baselines_bucket_arn,
-        )
+        # For single-account deployments, create resources locally; otherwise reference them
+        # Use RETAIN to avoid S3 deletion issues (user can clean up manually or via AWS console)
+        removal_policy = RemovalPolicy.RETAIN
+
+        if props.artifact_kms_key_arn:
+            kms_key = kms.Key.from_key_arn(self, "ArtifactKmsKey", key_arn=props.artifact_kms_key_arn)
+        else:
+            kms_key = kms.Key(
+                self,
+                "ArtifactKmsKey",
+                enable_key_rotation=True,
+                removal_policy=removal_policy,
+            )
+
+        if props.baselines_bucket_arn:
+            baselines_bucket = s3.Bucket.from_bucket_arn(
+                self,
+                "BaselinesBucket",
+                bucket_arn=props.baselines_bucket_arn,
+            )
+        else:
+            baselines_bucket = s3.Bucket(
+                self,
+                "BaselinesBucket",
+                bucket_name=f"mmc-{env}-baselines",
+                encryption=s3.BucketEncryption.KMS,
+                encryption_key=kms_key,
+                block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+                enforce_ssl=True,
+                versioned=True,
+                removal_policy=removal_policy,
+                auto_delete_objects=removal_policy == RemovalPolicy.DESTROY,
+            )
 
         outcomes_table = dynamodb.Table(
             self,
@@ -253,7 +276,7 @@ class InferenceMonitorStack(Stack):
             stream=dynamodb.StreamViewType.NEW_IMAGE,
             encryption=dynamodb.TableEncryption.CUSTOMER_MANAGED,
             encryption_key=kms_key,
-            removal_policy=RemovalPolicy.RETAIN,
+            removal_policy=removal_policy,
         )
 
         archive_bucket = s3.Bucket(
@@ -264,7 +287,8 @@ class InferenceMonitorStack(Stack):
             block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
             enforce_ssl=True,
             versioned=True,
-            removal_policy=RemovalPolicy.RETAIN,
+            removal_policy=removal_policy,
+            auto_delete_objects=removal_policy == RemovalPolicy.DESTROY,
         )
 
         log_groups = self._build_log_groups(env)
@@ -393,14 +417,35 @@ class InferenceMonitorStack(Stack):
                 ),
             )
 
-            # Create zip-based Lambda function
-            # Code is packaged directly; dependencies must be available in Lambda environment
-            fn = lambda_.Function(
+            # Create Docker container-based Lambda function
+            if props.analyser_image_source is not None:
+                # Use custom image source (e.g., for LocalStack tests with local Docker images)
+                code = props.analyser_image_source(analyser)
+            else:
+                # Use ECR image URIs
+                image_uri = props.analyser_image_uris.get(analyser, "")
+                if image_uri.startswith("mmc-"):
+                    # Local Docker image name (e.g., "mmc-mq-lambda:latest")
+                    repo_root = Path(__file__).resolve().parent.parent.parent.parent.parent
+                    code = lambda_.DockerImageCode.from_image_asset(
+                        directory=str(repo_root),
+                        file=f"containers/{analyser}/Dockerfile.lambda",
+                    )
+                else:
+                    # ECR image URI
+                    code = lambda_.DockerImageCode.from_ecr(
+                        repository=ecr.Repository.from_repository_arn(
+                            self,
+                            f"AnalyserRepo{analyser.title()}",
+                            repository_arn=f"arn:aws:ecr:{self.region}:{self.stack_account}:repository/mmc/analyser-{analyser}",
+                        ),
+                        tag_or_digest="latest",
+                    )
+
+            fn = lambda_.DockerImageFunction(
                 self,
                 f"Analyser{analyser.title()}",
-                code=lambda_.Code.from_asset(str(cdk_src_dir)),
-                handler="analyser_handler.handler",
-                runtime=lambda_.Runtime.PYTHON_3_12,
+                code=code,
                 role=exec_role,  # ty: ignore[invalid-argument-type]
                 function_name=f"mmc-{env}-{analyser}",
                 memory_size=props.lambda_memory_mib,
