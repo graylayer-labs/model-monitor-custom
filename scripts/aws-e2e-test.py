@@ -49,9 +49,7 @@ class AWSTestOrchestrator:
         """Print error message."""
         self.log(msg, "ERROR")
 
-    def run_cmd(
-        self, cmd: list[str], check: bool = True, capture: bool = False
-    ) -> subprocess.CompletedProcess:
+    def run_cmd(self, cmd: list[str], check: bool = True, capture: bool = False) -> subprocess.CompletedProcess:
         """Run shell command.
 
         Args:
@@ -176,6 +174,7 @@ class AWSTestOrchestrator:
             self.log_error(f"Test run failed: {e}")
             if self.verbose:
                 import traceback
+
                 traceback.print_exc()
             return False
 

@@ -53,8 +53,6 @@ def _localstack_image_source(analyser: str) -> lambda_.DockerImageCode:
     )
 
 
-
-
 def build_app(app: cdk.App) -> cdk.App:
     """Instantiate the inference monitor stack for testing.
 

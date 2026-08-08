@@ -95,13 +95,7 @@ def create_localstack_infrastructure() -> dict[str, str]:
     sfn_def = {
         "Comment": "Baseline analysis flow",
         "StartAt": "Pass",
-        "States": {
-            "Pass": {
-                "Type": "Pass",
-                "Result": {"status": "approved"},
-                "End": True
-            }
-        }
+        "States": {"Pass": {"Type": "Pass", "Result": {"status": "approved"}, "End": True}},
     }
 
     try:

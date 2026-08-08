@@ -81,7 +81,10 @@ def build_app(app: cdk.App) -> cdk.App:
             artifact_account_id="000000000000",
             artifact_kms_key_arn=kms_key_arn,
             baselines_bucket_arn=baselines_bucket_arn,
-            analyser_image_uris={a: f"000000000000.dkr.ecr.eu-west-1.amazonaws.com/mmc-{a}:latest" for a in ("mq", "dq", "bias", "explain", "shadow")},
+            analyser_image_uris={
+                a: f"000000000000.dkr.ecr.eu-west-1.amazonaws.com/mmc-{a}:latest"
+                for a in ("mq", "dq", "bias", "explain", "shadow")
+            },
             compute_backend="lambda",
             enable_event_wiring=False,
             analyser_image_source=local_image_loader,

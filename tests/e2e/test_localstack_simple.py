@@ -27,11 +27,7 @@ def test_baseline_registry_operations():
     os.environ["AWS_SECRET_ACCESS_KEY"] = "test"
     os.environ["AWS_DEFAULT_REGION"] = "eu-west-1"
 
-    ddb = boto3.client(
-        "dynamodb",
-        endpoint_url="http://localhost:4566",
-        region_name="eu-west-1"
-    )
+    ddb = boto3.client("dynamodb", endpoint_url="http://localhost:4566", region_name="eu-west-1")
 
     # Write a baseline registry entry
     table_name = resources["baseline_registry_table"]
@@ -42,17 +38,19 @@ def test_baseline_registry_operations():
             "sk": {"S": "v1"},
             "status": {"S": "approved"},
             "baseline_prefix": {"S": "s3://baselines/test-project/v1/"},
-            "analysers": {"M": {
-                "mq": {"S": "ok"},
-                "dq": {"S": "ok"},
-                "bias": {"S": "ok"},
-                "explain": {"S": "ok"},
-                "shadow": {"S": "ok"},
-            }},
+            "analysers": {
+                "M": {
+                    "mq": {"S": "ok"},
+                    "dq": {"S": "ok"},
+                    "bias": {"S": "ok"},
+                    "explain": {"S": "ok"},
+                    "shadow": {"S": "ok"},
+                }
+            },
             "manifest_uri": {"S": "s3://baselines/test-project/v1/manifest.json"},
             "sfn_execution_arn": {"S": "arn:aws:states:eu-west-1:000000000000:execution:baseline:abc123"},
             "evaluated_at": {"S": "2026-08-03T12:00:00Z"},
-        }
+        },
     )
 
     # Verify we can read it back
@@ -61,7 +59,7 @@ def test_baseline_registry_operations():
         Key={
             "project": {"S": "test-project"},
             "sk": {"S": "v1"},
-        }
+        },
     )
 
     assert "Item" in response
@@ -80,11 +78,7 @@ def test_s3_operations():
     os.environ["AWS_SECRET_ACCESS_KEY"] = "test"
     os.environ["AWS_DEFAULT_REGION"] = "eu-west-1"
 
-    s3 = boto3.client(
-        "s3",
-        endpoint_url="http://localhost:4566",
-        region_name="eu-west-1"
-    )
+    s3 = boto3.client("s3", endpoint_url="http://localhost:4566", region_name="eu-west-1")
 
     bucket = resources["baselines_bucket"]
 
@@ -109,10 +103,7 @@ def test_s3_operations():
     )
 
     # Verify we can read it back
-    response = s3.get_object(
-        Bucket=bucket,
-        Key="test-project/v1/input/manifest.json"
-    )
+    response = s3.get_object(Bucket=bucket, Key="test-project/v1/input/manifest.json")
 
     retrieved = json.loads(response["Body"].read())
     assert retrieved["project"] == "test-project"
@@ -178,24 +169,23 @@ def test_baseline_workflow():
             "sk": {"S": version},
             "status": {"S": "approved"},
             "baseline_prefix": {"S": f"s3://{baselines_bucket}/{project}/{version}/"},
-            "analysers": {"M": {
-                "mq": {"S": "approved"},
-                "dq": {"S": "approved"},
-                "bias": {"S": "approved"},
-                "explain": {"S": "approved"},
-                "shadow": {"S": "approved"},
-            }},
+            "analysers": {
+                "M": {
+                    "mq": {"S": "approved"},
+                    "dq": {"S": "approved"},
+                    "bias": {"S": "approved"},
+                    "explain": {"S": "approved"},
+                    "shadow": {"S": "approved"},
+                }
+            },
             "manifest_uri": {"S": f"s3://{baselines_bucket}/{project}/{version}/manifest.json"},
             "sfn_execution_arn": {"S": "arn:aws:states:eu-west-1:000000000000:execution:baseline:xyz789"},
             "evaluated_at": {"S": "2026-08-03T14:05:00Z"},
-        }
+        },
     )
 
     # 4. Verify we can retrieve and validate the baseline
-    response = ddb.get_item(
-        TableName=table_name,
-        Key={"project": {"S": project}, "sk": {"S": version}}
-    )
+    response = ddb.get_item(TableName=table_name, Key={"project": {"S": project}, "sk": {"S": version}})
 
     assert "Item" in response
     item = response["Item"]
@@ -208,10 +198,7 @@ def test_baseline_workflow():
 
     # 5. Verify outputs are readable from S3
     for analyser in analyser_results.keys():
-        result = s3.get_object(
-            Bucket=baselines_bucket,
-            Key=f"{project}/{version}/analysers/{analyser}/output.json"
-        )
+        result = s3.get_object(Bucket=baselines_bucket, Key=f"{project}/{version}/analysers/{analyser}/output.json")
         data = json.loads(result["Body"].read())
         assert data is not None
 
@@ -226,11 +213,7 @@ def test_lambda_invocation():
     os.environ["AWS_DEFAULT_REGION"] = "eu-west-1"
 
     # Set up clients
-    lambda_client = boto3.client(
-        "lambda",
-        endpoint_url="http://localhost:4566",
-        region_name="eu-west-1"
-    )
+    lambda_client = boto3.client("lambda", endpoint_url="http://localhost:4566", region_name="eu-west-1")
     iam = boto3.client("iam", endpoint_url="http://localhost:4566", region_name="eu-west-1")
 
     # 1. Create IAM role for Lambda (idempotent)
@@ -257,6 +240,7 @@ def test_lambda_invocation():
     # 2. Create a simple Lambda function zip
     # We'll use a minimal handler that's inline in the test
     import tempfile
+
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
 
@@ -312,10 +296,7 @@ def handler(event, context):
             invoke_resp = lambda_client.invoke(
                 FunctionName=function_arn,
                 InvocationType="RequestResponse",
-                Payload=json.dumps({
-                    "analyser_type": "mq",
-                    "run_id": "test-run-123"
-                }),
+                Payload=json.dumps({"analyser_type": "mq", "run_id": "test-run-123"}),
             )
             break
         except lambda_client.exceptions.ResourceConflictException:

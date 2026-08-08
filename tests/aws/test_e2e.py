@@ -137,15 +137,17 @@ class TestMonitoringWorkflow:
         response = lambda_client.invoke(
             FunctionName=fn_name,
             InvocationType="RequestResponse",
-            Payload=json.dumps({
-                "project": "test-project",
-                "run_id": run_id,
-                "input_uris_json": f'{{"data": "s3://{baselines_bucket}/test/{run_id}/input.parquet"}}',
-                "output_uri": f"s3://{baselines_bucket}/test/{run_id}/output",
-                "config_uri": f"s3://{baselines_bucket}/config.json",
-                "environment": env,
-                "variant": "AllTraffic",
-            }),
+            Payload=json.dumps(
+                {
+                    "project": "test-project",
+                    "run_id": run_id,
+                    "input_uris_json": f'{{"data": "s3://{baselines_bucket}/test/{run_id}/input.parquet"}}',
+                    "output_uri": f"s3://{baselines_bucket}/test/{run_id}/output",
+                    "config_uri": f"s3://{baselines_bucket}/config.json",
+                    "environment": env,
+                    "variant": "AllTraffic",
+                }
+            ),
         )
         assert response["StatusCode"] == 200
         logger.info(f"  ✓ Lambda invoked")

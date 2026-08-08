@@ -31,9 +31,9 @@ def _create_state_machine(sfn_client, role_arn: str) -> str:
                     _make_analyser_branch("explain"),
                     _make_analyser_branch("shadow"),
                 ],
-                "End": True
+                "End": True,
             }
-        }
+        },
     }
 
     response = sfn_client.create_state_machine(
@@ -51,13 +51,10 @@ def _make_analyser_branch(analyser_type: str) -> dict:
         "States": {
             "ExecuteAnalyser": {
                 "Type": "Pass",
-                "Result": {
-                    "analyser": analyser_type,
-                    "outcome": "succeeded"
-                },
-                "End": True
+                "Result": {"analyser": analyser_type, "outcome": "succeeded"},
+                "End": True,
             }
-        }
+        },
     }
 
 
@@ -80,12 +77,8 @@ def test_full_inference_monitor_fan_out(localstack_resources):
     trust_policy = {
         "Version": "2012-10-17",
         "Statement": [
-            {
-                "Effect": "Allow",
-                "Principal": {"Service": "states.amazonaws.com"},
-                "Action": "sts:AssumeRole"
-            }
-        ]
+            {"Effect": "Allow", "Principal": {"Service": "states.amazonaws.com"}, "Action": "sts:AssumeRole"}
+        ],
     }
 
     try:
@@ -192,4 +185,6 @@ def test_full_inference_monitor_fan_out(localstack_resources):
     tables = ddb.list_tables()
     assert outcomes_table in tables["TableNames"], f"Table {outcomes_table} not found"
 
-    logger.info(f"LocalStack E2E test passed: state_machine={sfn_arn}, bucket={baselines_bucket}, table={outcomes_table}")
+    logger.info(
+        f"LocalStack E2E test passed: state_machine={sfn_arn}, bucket={baselines_bucket}, table={outcomes_table}"
+    )
