@@ -29,20 +29,22 @@ def test_full_inference_monitor_fan_out(localstack_resources):
     ddb = boto3.client("dynamodb", endpoint_url="http://localhost:4566", region_name=region)
     sfn = boto3.client("stepfunctions", endpoint_url="http://localhost:4566", region_name=region)
 
-    # 1. Bootstrap CDK for LocalStack
-    subprocess.run(
-        ["cdklocal", "bootstrap", "--profile", "localstack"],
-        cwd=str(test_cdk_dir),
-        env={**os.environ, "AWS_PROFILE": "localstack"},
-        check=True,
-    )
+    # 1. Deploy the test CDK app (skip bootstrap - not needed for LocalStack)
+    # Set up environment for cdklocal to connect to LocalStack
+    deploy_env = {
+        **os.environ,
+        "AWS_ACCESS_KEY_ID": "test",
+        "AWS_SECRET_ACCESS_KEY": "test",
+        "AWS_DEFAULT_REGION": region,
+        "LOCALSTACK_ENDPOINT_URL": "http://localhost:4566",
+    }
 
-    # 2. Deploy the test CDK app
     deploy_output = subprocess.run(
         ["cdklocal", "deploy", "--require-approval", "never"],
         cwd=str(test_cdk_dir),
         capture_output=True,
         text=True,
+        env=deploy_env,
         check=True,
     )
 
@@ -59,8 +61,9 @@ def test_full_inference_monitor_fan_out(localstack_resources):
 
     # 4. Seed fixture data (config.json + input snapshot)
     config_data = {"threshold": 0.5}
+    baselines_bucket = "mmc-e2e-baselines"
     s3.put_object(
-        Bucket="mmc-test-baselines",
+        Bucket=baselines_bucket,
         Key="config.json",
         Body=json.dumps(config_data),
     )
@@ -68,7 +71,7 @@ def test_full_inference_monitor_fan_out(localstack_resources):
     # For a minimal test, create a dummy input parquet (in practice, copy from examples/adult-classifier)
     # For now, just seed a marker that tests can look for
     s3.put_object(
-        Bucket="mmc-test-baselines",
+        Bucket=baselines_bucket,
         Key="input/test-input.parquet",
         Body=b"dummy-parquet-content",
     )
@@ -132,8 +135,9 @@ def test_full_inference_monitor_fan_out(localstack_resources):
 
     # 7. Verify outcomes in DynamoDB
     # Query the outcomes table for all rows with this run_id
+    outcomes_table = "mmc-e2e-outcomes"
     response = ddb.query(
-        TableName="mmc-test-outcomes",
+        TableName=outcomes_table,
         KeyConditionExpression="run_id = :run_id",
         ExpressionAttributeValues={":run_id": {"S": run_id}},
     )
