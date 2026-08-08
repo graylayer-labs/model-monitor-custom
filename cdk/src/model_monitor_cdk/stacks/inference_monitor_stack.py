@@ -412,14 +412,34 @@ class InferenceMonitorStack(Stack):
                 ),
             )
 
-            # Create zip-based Lambda function
-            # Code is packaged directly; dependencies must be available in Lambda environment
-            fn = lambda_.Function(
+            # Create Docker container-based Lambda function
+            if props.analyser_image_source is not None:
+                # Use custom image source (e.g., for LocalStack tests with local Docker images)
+                code = props.analyser_image_source(analyser)
+            else:
+                # Use ECR image URIs
+                image_uri = props.analyser_image_uris.get(analyser, "")
+                if image_uri.startswith("mmc-"):
+                    # Local Docker image name (e.g., "mmc-mq-lambda:latest")
+                    code = lambda_.DockerImageCode.from_image_asset(
+                        directory=str(Path(__file__).parent.parent.parent / f"containers/{analyser}"),
+                        file="Dockerfile.lambda",
+                    )
+                else:
+                    # ECR image URI
+                    code = lambda_.DockerImageCode.from_ecr(
+                        repository=ecr.Repository.from_repository_arn(
+                            self,
+                            f"AnalyserRepo{analyser.title()}",
+                            repository_arn=f"arn:aws:ecr:{self.region}:{self.stack_account}:repository/mmc/analyser-{analyser}",
+                        ),
+                        tag_or_digest="latest",
+                    )
+
+            fn = lambda_.DockerImageFunction(
                 self,
                 f"Analyser{analyser.title()}",
-                code=lambda_.Code.from_asset(str(cdk_src_dir)),
-                handler="analyser_handler.handler",
-                runtime=lambda_.Runtime.PYTHON_3_12,
+                code=code,
                 role=exec_role,  # ty: ignore[invalid-argument-type]
                 function_name=f"mmc-{env}-{analyser}",
                 memory_size=props.lambda_memory_mib,
