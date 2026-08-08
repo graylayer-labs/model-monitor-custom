@@ -1,0 +1,14 @@
+{
+  "schema_version": "1",
+  "project": "mmc-aws-test",
+  "model_version": "e2e-smoke-test-v1",
+  "produced_at": "2026-08-01T00:00:00Z",
+  "provenance": {
+    "git_sha": "e2e-test",
+    "pipeline_run_id": "aws-smoke-test-run"
+  },
+  "artifacts": {
+    "training_snapshot": "s3://{{BASELINES_BUCKET}}/mmc-aws-test/e2e-smoke-test-v1/input/training.parquet",
+    "predictions": "s3://{{BASELINES_BUCKET}}/mmc-aws-test/e2e-smoke-test-v1/input/predictions.parquet"
+  }
+}
