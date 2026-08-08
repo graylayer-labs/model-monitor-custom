@@ -107,6 +107,7 @@ Three decoupled subsystems, JSON-schema validated:
 ✅ **Fast** — Parallel analysers, 5-10min for snapshot analysis
 ✅ **Safe** — KMS encryption, IAM roles, audit logging
 ✅ **Testable** — 292 tests (255 CDK + 37 container tests)
+✅ **CI/CD Ready** — GitHub Actions + LocalStack E2E tests on every PR
 
 ## Getting started
 
@@ -142,6 +143,29 @@ python3 scripts/localstack-test-runner.py --verbose
 Tests run in LocalStack with real S3, DynamoDB, Lambda, and Step Functions. Exit code: 0 = pass, non-zero = fail.
 
 [LocalStack testing guide →](docs/LOCALSTACK_TESTING.md)
+
+### GitHub Actions CI/CD
+
+Every pull request runs tests automatically:
+
+| Workflow | Trigger | Requirement | Details |
+|----------|---------|-------------|---------|
+| **LocalStack E2E Tests** | Every PR | ✅ Must pass | Deploys full stack, verifies infrastructure (S3, DynamoDB, Step Functions, Lambda) in ~5 minutes |
+| **AWS E2E Tests** | Manual only | Optional | Validates against real AWS infrastructure (use for final validation before merge) |
+
+**Setup (one-time):**
+```bash
+# 1. Add AWS account secret to GitHub
+gh secret set AWS_ACCOUNT_ID --body "204107103815"
+
+# 2. Create GitHub environment for AWS testing
+gh api repos/graylayer-labs/model-monitor-custom/environments -f name="AWS Testing"
+
+# 3. Enable branch protection on main
+# Go to Settings → Branches → Require status checks to pass: "localstack-e2e-tests"
+```
+
+[CI/CD setup guide →](docs/CI_CD_SETUP.md)
 
 ### Deploy to AWS
 
@@ -205,7 +229,8 @@ Tests run in LocalStack with real S3, DynamoDB, Lambda, and Step Functions. Exit
 |-----------|--------|-------|
 | **Snapshot Analysis** | ✅ Complete | Lambda compute, Step Functions orchestration |
 | **Live Monitoring** | ✅ Complete | EventBridge triggers, DynamoDB outcomes table |
-| **LocalStack Testing** | ✅ Complete | 4 E2E tests, ~34s execution |
+| **LocalStack Testing** | ✅ Complete | E2E tests with S3, DynamoDB, Lambda, Step Functions |
+| **CI/CD Pipeline** | ✅ Complete | GitHub Actions with two-tier testing (LocalStack required, AWS optional) |
 | **Multi-account Deploy** | ✅ Complete | Config-driven topology (accounts.yaml + projects.yaml) |
 | **Analyser Library** | ✅ Complete | 5 analysers (mq, dq, bias, explain, shadow) |
 
