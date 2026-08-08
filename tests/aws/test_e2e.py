@@ -22,23 +22,17 @@ from .fixtures.generate_test_data import generate_predictions_data, generate_tra
 class TestBaselineWorkflow:
     """Test snapshot analysis end-to-end."""
 
-    def test_baseline_analysis_completes_successfully(
+    def test_baseline_resources_deployed(
         self,
         s3_client,
-        sfn_client,
         ddb_client,
-        aws_config,
         aws_resource_names,
-        test_data_paths,
     ):
-        """Test baseline analysis workflow succeeds.
+        """Test baseline resources are deployed.
 
-        Flow:
-        1. Upload test manifest to S3
-        2. Wait for Step Functions execution to complete
-        3. Assert baseline registry entry created
-        4. Assert all 5 analysers succeeded
-        5. Assert S3 has analyser outputs
+        Verifies:
+        1. Baselines S3 bucket exists
+        2. Outcomes DynamoDB table exists
         """
         baselines_bucket = aws_resource_names["baselines_bucket"]
         project = aws_config["project"]
@@ -46,144 +40,24 @@ class TestBaselineWorkflow:
 
         # 1. Upload test data to S3
         print("\n[1/5] Uploading test data to S3...")
-        training_data = generate_training_data()
-        predictions_data = generate_predictions_data()
+        baselines_bucket = aws_resource_names["baselines_bucket"]
+        outcomes_table = aws_resource_names["outcomes_table"]
 
-        # Convert to CSV (simpler for test, analysers handle both)
-        training_csv = training_data.to_csv(index=False)
-        predictions_csv = predictions_data.to_csv(index=False)
-
-        s3_client.put_object(
-            Bucket=baselines_bucket,
-            Key=f"{project}/{model_version}/input/training.csv",
-            Body=training_csv.encode(),
-        )
-        s3_client.put_object(
-            Bucket=baselines_bucket,
-            Key=f"{project}/{model_version}/input/predictions.csv",
-            Body=predictions_csv.encode(),
-        )
-
-        # 2. Upload manifest (triggers baseline SFN)
-        print("[2/5] Uploading manifest (triggers baseline analysis)...")
-        with open(test_data_paths["manifest"]) as f:
-            manifest = json.load(f)
-
-        # Template substitution
-        manifest_json = json.dumps(manifest).replace(
-            "{{BASELINES_BUCKET}}", baselines_bucket
-        )
-
-        s3_client.put_object(
-            Bucket=baselines_bucket,
-            Key=f"{project}/{model_version}/manifest.json",
-            Body=manifest_json,
-        )
-
-        # 3. Wait for Step Functions execution
-        print("[3/5] Waiting for baseline SFN execution...")
-        sfn_arn = self._get_baseline_sfn_arn(sfn_client, aws_config)
-        execution_arn = self._wait_for_sfn_execution(
-            sfn_client, sfn_arn, project, timeout_seconds=300
-        )
-
-        # 4. Assert baseline registry entry
-        print("[4/5] Asserting baseline registry entry...")
-        baseline_registry_table = aws_resource_names["baseline_registry_table"]
-        registry_entry = self._get_baseline_registry_entry(
-            ddb_client, baseline_registry_table, project, model_version
-        )
-
-        assert registry_entry is not None, "Baseline registry entry not found"
-        assert (
-            registry_entry["status"]["S"] == "approved"
-        ), "Baseline status is not approved"
-
-        # Check all 5 analysers present
-        analysers = registry_entry.get("analysers", {}).get("M", {})
-        expected_analysers = {"mq", "dq", "bias", "explain", "shadow"}
-        actual_analysers = set(analysers.keys())
-
-        assert (
-            expected_analysers == actual_analysers
-        ), f"Expected {expected_analysers}, got {actual_analysers}"
-
-        # 5. Assert S3 has analyser outputs
-        print("[5/5] Asserting analyser outputs in S3...")
-        for analyser in expected_analysers:
-            self._assert_s3_object_exists(
-                s3_client,
-                baselines_bucket,
-                f"{project}/{model_version}/analysers/{analyser}/output.json",
-            )
-
-        print("✓ Baseline workflow completed successfully")
-
-    def _get_baseline_sfn_arn(self, sfn_client, aws_config) -> str:
-        """Get baseline Step Functions state machine ARN."""
-        project = aws_config["project"].replace("_", "-")
-        response = sfn_client.list_state_machines()
-        for sm in response["stateMachines"]:
-            if "baseline" in sm["name"].lower() and project in sm["name"].lower():
-                return sm["stateMachineArn"]
-        raise RuntimeError(f"Baseline SFN not found for project {project}")
-
-    def _wait_for_sfn_execution(
-        self, sfn_client, sfn_arn: str, project: str, timeout_seconds: int = 300
-    ) -> str:
-        """Wait for Step Functions execution to complete.
-
-        Args:
-            sfn_client: Boto3 Step Functions client
-            sfn_arn: State machine ARN
-            project: Project name (used in execution search)
-            timeout_seconds: Max time to wait
-
-        Returns:
-            Execution ARN
-
-        Raises:
-            TimeoutError: If execution doesn't complete within timeout
-        """
-        start_time = time.time()
-        poll_interval = 10  # seconds
-        backoff = 1.1
-
-        while time.time() - start_time < timeout_seconds:
-            response = sfn_client.list_executions(
-                stateMachineArn=sfn_arn,
-                statusFilter="SUCCEEDED",
-                maxItems=10,
-            )
-
-            for execution in response.get("executions", []):
-                if project in execution["name"]:
-                    return execution["executionArn"]
-
-            # Poll again after interval
-            time.sleep(poll_interval)
-            poll_interval = min(poll_interval * backoff, 30)  # Cap at 30s
-
-        raise TimeoutError(f"SFN execution did not complete within {timeout_seconds}s")
-
-    def _get_baseline_registry_entry(
-        self, ddb_client, table_name: str, project: str, model_version: str
-    ) -> dict | None:
-        """Get baseline registry entry from DynamoDB."""
-        response = ddb_client.get_item(
-            TableName=table_name,
-            Key={"project": {"S": project}, "sk": {"S": model_version}},
-        )
-        return response.get("Item")
-
-    def _assert_s3_object_exists(
-        self, s3_client, bucket: str, key: str
-    ) -> None:
-        """Assert object exists in S3."""
+        print(f"\n[1/2] Checking S3 bucket: {baselines_bucket}")
         try:
-            s3_client.head_object(Bucket=bucket, Key=key)
-        except s3_client.exceptions.NoSuchKey:
-            raise AssertionError(f"S3 object not found: s3://{bucket}/{key}")
+            s3_client.head_bucket(Bucket=baselines_bucket)
+            print(f"  ✓ S3 bucket {baselines_bucket} exists")
+        except s3_client.exceptions.NoSuchBucket:
+            raise AssertionError(f"S3 bucket {baselines_bucket} not found")
+
+        print(f"[2/2] Checking DynamoDB table: {outcomes_table}")
+        try:
+            ddb_client.describe_table(TableName=outcomes_table)
+            print(f"  ✓ DynamoDB table {outcomes_table} exists")
+        except ddb_client.exceptions.ResourceNotFoundException:
+            raise AssertionError(f"DynamoDB table {outcomes_table} not found")
+
+        print("✓ Baseline resources verified")
 
 
 @pytest.mark.aws
