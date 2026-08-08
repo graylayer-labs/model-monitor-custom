@@ -15,6 +15,7 @@ from uuid import uuid4
 
 import boto3
 import pytest
+from loguru import logger
 
 from .fixtures.generate_test_data import generate_predictions_data, generate_training_data
 
@@ -37,25 +38,25 @@ class TestInfrastructureDeployment:
         env = "e2e"
 
         # Check S3 bucket
-        print(f"\n[1/3] Checking S3 bucket: {baselines_bucket}")
+        logger.info(f"\n[1/3] Checking S3 bucket: {baselines_bucket}")
         s3_client.head_bucket(Bucket=baselines_bucket)
-        print(f"  ✓ S3 bucket exists")
+        logger.info(f"  ✓ S3 bucket exists")
 
         # Check DynamoDB table
-        print(f"[2/3] Checking DynamoDB table: {outcomes_table}")
+        logger.info(f"[2/3] Checking DynamoDB table: {outcomes_table}")
         table = ddb_client.describe_table(TableName=outcomes_table)
         assert table["Table"]["TableStatus"] == "ACTIVE"
-        print(f"  ✓ DynamoDB table active")
+        logger.info(f"  ✓ DynamoDB table active")
 
         # Check Lambda functions
-        print(f"[3/3] Checking Lambda functions...")
+        logger.info(f"[3/3] Checking Lambda functions...")
         response = lambda_client.list_functions()
         lambda_names = {fn["FunctionName"] for fn in response["Functions"]}
         expected_analysers = {"mq", "dq", "bias", "explain", "shadow"}
         for analyser in expected_analysers:
             fn_name = f"mmc-{env}-{analyser}"
             assert fn_name in lambda_names, f"Lambda {fn_name} not found"
-        print(f"  ✓ All 5 analyser Lambdas deployed")
+        logger.info(f"  ✓ All 5 analyser Lambdas deployed")
 
 
 @pytest.mark.aws
@@ -69,7 +70,7 @@ class TestLambdaInvocation:
         analyser = "mq"
         fn_name = f"mmc-{env}-{analyser}"
 
-        print(f"\n[1/2] Invoking {fn_name}...")
+        logger.info(f"\n[1/2] Invoking {fn_name}...")
         payload = {
             "project": "test-project",
             "run_id": str(uuid4()),
@@ -86,12 +87,12 @@ class TestLambdaInvocation:
                 InvocationType="RequestResponse",
                 Payload=json.dumps(payload),
             )
-            print(f"  ✓ Lambda invoked successfully")
+            logger.info(f"  ✓ Lambda invoked successfully")
         except lambda_client.exceptions.ClientError as e:
             pytest.fail(f"Lambda invocation failed: {e}")
 
         # Verify response structure
-        print(f"[2/2] Checking response...")
+        logger.info(f"[2/2] Checking response...")
         assert response["StatusCode"] in [200, 202], f"Got status {response['StatusCode']}"
 
         if "Payload" in response:
@@ -99,7 +100,7 @@ class TestLambdaInvocation:
             # Should have analyser type in response
             assert "analyser" in payload_data or payload_data.get("statusCode") in [200, 202]
 
-        print(f"  ✓ Response valid")
+        logger.info(f"  ✓ Response valid")
 
 
 @pytest.mark.aws
@@ -121,17 +122,17 @@ class TestMonitoringWorkflow:
         run_id = str(uuid4())
 
         # 1. Upload test data
-        print(f"\n[1/4] Uploading test data...")
+        logger.info(f"\n[1/4] Uploading test data...")
         test_data = generate_predictions_data()
         s3_client.put_object(
             Bucket=baselines_bucket,
             Key=f"test/{run_id}/input.parquet",
             Body=test_data.to_csv(index=False).encode(),
         )
-        print(f"  ✓ Test data uploaded")
+        logger.info(f"  ✓ Test data uploaded")
 
         # 2. Invoke Lambda
-        print(f"[2/4] Invoking analyser Lambda...")
+        logger.info(f"[2/4] Invoking analyser Lambda...")
         fn_name = f"mmc-{env}-mq"
         response = lambda_client.invoke(
             FunctionName=fn_name,
@@ -147,14 +148,14 @@ class TestMonitoringWorkflow:
             }),
         )
         assert response["StatusCode"] == 200
-        print(f"  ✓ Lambda invoked")
+        logger.info(f"  ✓ Lambda invoked")
 
         # 3. Wait for async processing (outcomes might be written async)
-        print(f"[3/4] Waiting for outcomes...")
+        logger.info(f"[3/4] Waiting for outcomes...")
         time.sleep(2)
 
         # 4. Query outcomes
-        print(f"[4/4] Verifying outcomes recorded...")
+        logger.info(f"[4/4] Verifying outcomes recorded...")
         try:
             result = ddb_client.query(
                 TableName=outcomes_table,
@@ -167,8 +168,8 @@ class TestMonitoringWorkflow:
                 for item in items:
                     assert "outcome" in item
                     assert "analyser_type" in item
-                print(f"  ✓ {len(items)} outcome(s) recorded")
+                logger.info(f"  ✓ {len(items)} outcome(s) recorded")
             else:
-                print(f"  ⚠ No outcomes yet (async processing)")
+                logger.info(f"  ⚠ No outcomes yet (async processing)")
         except ddb_client.exceptions.ResourceNotFoundException:
             pytest.skip("Outcomes table not accessible (check permissions)")
