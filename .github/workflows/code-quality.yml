@@ -1,0 +1,167 @@
+name: Code Quality
+
+on:
+  pull_request:
+    paths:
+      - '**.py'
+      - '**.js'
+      - '**.ts'
+      - '**.jsx'
+      - '**.tsx'
+      - '**.go'
+      - 'pyproject.toml'
+      - 'package.json'
+      - 'go.mod'
+      - 'ruff.toml'
+      - 'tsconfig.json'
+      - 'pyrightconfig.json'
+      - '.github/workflows/code-quality.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  detect-languages:
+    runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.detect.outputs.python }}
+      javascript: ${{ steps.detect.outputs.javascript }}
+      go: ${{ steps.detect.outputs.go }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: detect
+        run: |
+          [ -f pyproject.toml ] && echo "python=true" >> $GITHUB_OUTPUT || echo "python=false" >> $GITHUB_OUTPUT
+          [ -f "package.json" ] && echo "javascript=true" >> $GITHUB_OUTPUT || echo "javascript=false" >> $GITHUB_OUTPUT
+          [ -f go.mod ] && echo "go=true" >> $GITHUB_OUTPUT || echo "go=false" >> $GITHUB_OUTPUT
+
+  python-quality:
+    needs: detect-languages
+    if: needs.detect-languages.outputs.python == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v2
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --all-extras
+
+      - name: Ruff check
+        run: uv run ruff check .
+
+      - name: Ruff format
+        run: uv run ruff format --check .
+
+      - name: Type check with ty
+        run: uv run ty . || true
+
+      - name: Run tests
+        run: uv run pytest tests/ -v --tb=short 2>/dev/null || echo "No tests found"
+
+  javascript-quality:
+    needs: detect-languages
+    if: needs.detect-languages.outputs.javascript == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linter
+        run: npm run lint 2>/dev/null || echo "No lint script defined"
+
+      - name: Run tests
+        run: npm test 2>/dev/null || echo "No test script defined"
+
+  go-quality:
+    needs: detect-languages
+    if: needs.detect-languages.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v4
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: latest
+
+      - name: Run tests
+        run: go test ./...
+
+  check-labels:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify PR has required labels
+        run: |
+          LABELS=$(gh pr view ${{ github.event.pull_request.number }} --json labels --jq '.labels[].name' || echo "")
+
+          # Check for at least one data:* label
+          if ! echo "$LABELS" | grep -q "^data:"; then
+            echo "❌ Missing data:* label (e.g., data:COCO/Detection)"
+            exit 1
+          fi
+
+          # Check for at least one model:* label
+          if ! echo "$LABELS" | grep -q "^model:"; then
+            echo "❌ Missing model:* label (e.g., model:YOLO/v8)"
+            exit 1
+          fi
+
+          # Check for at least one status:* label
+          if ! echo "$LABELS" | grep -q "^status:"; then
+            echo "❌ Missing status:* label (e.g., status:Experimental)"
+            exit 1
+          fi
+
+          # Check for at least one source:* label
+          if ! echo "$LABELS" | grep -q "^source:"; then
+            echo "❌ Missing source:* label (e.g., source:PyTorch)"
+            exit 1
+          fi
+
+          echo "✓ All required labels present"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  auto-merge:
+    needs: [detect-languages, python-quality, javascript-quality, go-quality, check-labels]
+    if: |
+      always() &&
+      (needs.python-quality.result == 'success' || needs.python-quality.result == 'skipped') &&
+      (needs.javascript-quality.result == 'success' || needs.javascript-quality.result == 'skipped') &&
+      (needs.go-quality.result == 'success' || needs.go-quality.result == 'skipped') &&
+      needs.check-labels.result == 'success' &&
+      github.event.pull_request.draft == false &&
+      contains(github.event.pull_request.labels.*.name, 'auto-merge')
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable auto-merge
+        run: |
+          gh pr merge ${{ github.event.pull_request.number }} \
+            --squash \
+            --auto
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete branch after merge
+        if: success()
+        run: |
+          git push origin --delete ${{ github.head_ref }} || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

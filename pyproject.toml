@@ -85,3 +85,7 @@ exclude_also = [
     "@abstractmethod",
     "\\.\\.\\.",
 ]
+
+[tool.ruff]
+extend-config = ["https://raw.githubusercontent.com/graylayer-labs/.github/main/ruff.toml"]
+target-version = "py311"
